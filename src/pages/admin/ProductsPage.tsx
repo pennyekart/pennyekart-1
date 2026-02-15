@@ -15,7 +15,8 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 interface Product {
   id: string; name: string; description: string | null; price: number;
   category: string | null; stock: number; is_active: boolean; image_url: string | null;
-  section: string | null;
+  image_url_2: string | null; image_url_3: string | null;
+  section: string | null; purchase_rate: number; mrp: number; discount_rate: number;
 }
 
 interface Category {
@@ -29,7 +30,7 @@ const sectionOptions = [
   { value: "low_budget", label: "Low Budget Picks" },
 ];
 
-const emptyProduct = { name: "", description: "", price: 0, category: "", stock: 0, is_active: true, image_url: "", section: "" };
+const emptyProduct = { name: "", description: "", price: 0, category: "", stock: 0, is_active: true, image_url: "", image_url_2: "", image_url_3: "", section: "", purchase_rate: 0, mrp: 0, discount_rate: 0 };
 
 const ProductsPage = () => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -70,7 +71,7 @@ const ProductsPage = () => {
   };
 
   const openEdit = (p: Product) => {
-    setForm({ name: p.name, description: p.description ?? "", price: p.price, category: p.category ?? "", stock: p.stock, is_active: p.is_active, image_url: p.image_url ?? "", section: p.section ?? "" });
+    setForm({ name: p.name, description: p.description ?? "", price: p.price, category: p.category ?? "", stock: p.stock, is_active: p.is_active, image_url: p.image_url ?? "", image_url_2: p.image_url_2 ?? "", image_url_3: p.image_url_3 ?? "", section: p.section ?? "", purchase_rate: p.purchase_rate, mrp: p.mrp, discount_rate: p.discount_rate });
     setEditId(p.id); setOpen(true);
   };
 
@@ -88,8 +89,13 @@ const ProductsPage = () => {
               <div className="space-y-3">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div><Label>Description</Label><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><Label>Purchase Rate</Label><Input type="number" value={form.purchase_rate} onChange={(e) => setForm({ ...form, purchase_rate: +e.target.value })} /></div>
+                  <div><Label>MRP</Label><Input type="number" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: +e.target.value })} /></div>
+                  <div><Label>Discount Rate</Label><Input type="number" value={form.discount_rate} onChange={(e) => setForm({ ...form, discount_rate: +e.target.value })} /></div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Price</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: +e.target.value })} /></div>
+                  <div><Label>Selling Price</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: +e.target.value })} /></div>
                   <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: +e.target.value })} /></div>
                 </div>
                 <div>
@@ -112,7 +118,9 @@ const ProductsPage = () => {
                     )}
                   </select>
                 </div>
-                <div><Label>Image URL</Label><Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></div>
+                <div><Label>Image URL 1</Label><Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="Main image URL" /></div>
+                <div><Label>Image URL 2</Label><Input value={form.image_url_2} onChange={(e) => setForm({ ...form, image_url_2: e.target.value })} placeholder="Second image URL" /></div>
+                <div><Label>Image URL 3</Label><Input value={form.image_url_3} onChange={(e) => setForm({ ...form, image_url_3: e.target.value })} placeholder="Third image URL" /></div>
                 <div className="flex items-center gap-2"><Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} /><Label>Active</Label></div>
                 <Button className="w-full" onClick={handleSave}>Save</Button>
               </div>
@@ -125,9 +133,11 @@ const ProductsPage = () => {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Purchase Rate</TableHead>
+              <TableHead>MRP</TableHead>
+              <TableHead>Discount</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>Stock</TableHead>
-              <TableHead>Section</TableHead>
               <TableHead>Active</TableHead>
               <TableHead className="w-24">Actions</TableHead>
             </TableRow>
@@ -136,9 +146,11 @@ const ProductsPage = () => {
             {products.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell>₹{p.purchase_rate}</TableCell>
+                <TableCell>₹{p.mrp}</TableCell>
+                <TableCell>{p.discount_rate}%</TableCell>
                 <TableCell>₹{p.price}</TableCell>
                 <TableCell>{p.stock}</TableCell>
-                <TableCell>{sectionOptions.find((o) => o.value === p.section)?.label || "—"}</TableCell>
                 <TableCell>{p.is_active ? "✓" : "✗"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">

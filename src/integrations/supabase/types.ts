@@ -382,11 +382,16 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          discount_rate: number
           id: string
           image_url: string | null
+          image_url_2: string | null
+          image_url_3: string | null
           is_active: boolean
+          mrp: number
           name: string
           price: number
+          purchase_rate: number
           section: string | null
           stock: number
           updated_at: string
@@ -397,11 +402,16 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          discount_rate?: number
           id?: string
           image_url?: string | null
+          image_url_2?: string | null
+          image_url_3?: string | null
           is_active?: boolean
+          mrp?: number
           name: string
           price?: number
+          purchase_rate?: number
           section?: string | null
           stock?: number
           updated_at?: string
@@ -412,11 +422,16 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          discount_rate?: number
           id?: string
           image_url?: string | null
+          image_url_2?: string | null
+          image_url_3?: string | null
           is_active?: boolean
+          mrp?: number
           name?: string
           price?: number
+          purchase_rate?: number
           section?: string | null
           stock?: number
           updated_at?: string
