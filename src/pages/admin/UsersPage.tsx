@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -13,9 +14,13 @@ interface Profile {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  mobile_number: string | null;
   role_id: string | null;
   is_super_admin: boolean;
   is_approved: boolean;
+  user_type: string;
+  local_body_id: string | null;
+  ward_number: number | null;
 }
 
 interface Role {
@@ -23,9 +28,17 @@ interface Role {
   name: string;
 }
 
+const USER_TYPE_LABELS: Record<string, string> = {
+  all: "All Users",
+  customer: "Customers",
+  delivery_staff: "Delivery Staff",
+  selling_partner: "Selling Partners",
+};
+
 const UsersPage = () => {
   const [users, setUsers] = useState<Profile[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [filterType, setFilterType] = useState("all");
   const { isSuperAdmin } = usePermissions();
   const { toast } = useToast();
 
@@ -39,6 +52,8 @@ const UsersPage = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const filteredUsers = filterType === "all" ? users : users.filter(u => u.user_type === filterType);
 
   const updateRole = async (userId: string, roleId: string) => {
     const { error } = await supabase.from("profiles").update({ role_id: roleId === "none" ? null : roleId }).eq("user_id", userId);
@@ -58,25 +73,56 @@ const UsersPage = () => {
     else { toast({ title: !current ? "User approved" : "User unapproved" }); fetchData(); }
   };
 
+  const getTypeBadgeVariant = (type: string) => {
+    switch (type) {
+      case "delivery_staff": return "default";
+      case "selling_partner": return "secondary";
+      default: return "outline";
+    }
+  };
+
   return (
     <AdminLayout>
-      <h1 className="mb-6 text-2xl font-bold">Users Management</h1>
+      <h1 className="mb-4 text-2xl font-bold">Users Management</h1>
+
+      <Tabs value={filterType} onValueChange={setFilterType} className="mb-4">
+        <TabsList>
+          {Object.entries(USER_TYPE_LABELS).map(([key, label]) => (
+            <TabsTrigger key={key} value={key}>
+              {label}
+              <Badge variant="outline" className="ml-2 text-xs">
+                {key === "all" ? users.length : users.filter(u => u.user_type === key).length}
+              </Badge>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead>Email / Mobile</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Approved</TableHead>
               <TableHead>Role</TableHead>
               {isSuperAdmin && <TableHead>Super Admin</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((u) => (
+            {filteredUsers.map((u) => (
               <TableRow key={u.id}>
                 <TableCell>{u.full_name ?? "—"}</TableCell>
-                <TableCell>{u.email}</TableCell>
+                <TableCell>
+                  <div>{u.email ?? "—"}</div>
+                  {u.mobile_number && <div className="text-xs text-muted-foreground">{u.mobile_number}</div>}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={getTypeBadgeVariant(u.user_type)}>
+                    {USER_TYPE_LABELS[u.user_type] ?? u.user_type}
+                  </Badge>
+                </TableCell>
                 <TableCell>
                   <Switch checked={u.is_approved} onCheckedChange={() => toggleApproval(u.user_id, u.is_approved)} />
                 </TableCell>
@@ -100,6 +146,13 @@ const UsersPage = () => {
                 )}
               </TableRow>
             ))}
+            {filteredUsers.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={isSuperAdmin ? 6 : 5} className="text-center text-muted-foreground py-8">
+                  No users found
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
