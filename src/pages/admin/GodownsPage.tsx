@@ -59,9 +59,11 @@ const GodownsPage = () => {
   const [selectedGodown, setSelectedGodown] = useState<Godown | null>(null);
   const [form, setForm] = useState({ name: "", godown_type: "micro" });
   const [assignLocalBodyId, setAssignLocalBodyId] = useState("");
+  const [selectedLocalBodyIds, setSelectedLocalBodyIds] = useState<string[]>([]);
   const [selectedWards, setSelectedWards] = useState<number[]>([]);
   const [allWards, setAllWards] = useState(false);
   const [activeTab, setActiveTab] = useState("micro");
+  const [localBodySearch, setLocalBodySearch] = useState("");
 
   const fetchGodowns = async () => {
     const { data } = await supabase.from("godowns").select("*").order("created_at", { ascending: false });
@@ -96,10 +98,10 @@ const GodownsPage = () => {
   const isMicroGodown = selectedGodown?.godown_type === "micro";
 
   const handleAssign = async () => {
-    if (!selectedGodown || !assignLocalBodyId) return;
+    if (!selectedGodown) return;
 
     if (isMicroGodown) {
-      // For micro godowns, assign wards
+      if (!assignLocalBodyId) return;
       const wardNumbers = allWards
         ? Array.from({ length: selectedLocalBody?.ward_count ?? 0 }, (_, i) => i + 1)
         : selectedWards;
@@ -109,7 +111,6 @@ const GodownsPage = () => {
         return;
       }
 
-      // Also add to godown_local_bodies if not already there
       const existing = godownLocalBodies.find(
         glb => glb.godown_id === selectedGodown.id && glb.local_body_id === assignLocalBodyId
       );
@@ -117,7 +118,6 @@ const GodownsPage = () => {
         await supabase.from("godown_local_bodies").insert({ godown_id: selectedGodown.id, local_body_id: assignLocalBodyId });
       }
 
-      // Remove existing wards for this godown+local_body combo, then insert new
       const existingWards = godownWards.filter(
         w => w.godown_id === selectedGodown.id && w.local_body_id === assignLocalBodyId
       );
@@ -134,10 +134,23 @@ const GodownsPage = () => {
       if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
       else toast({ title: `${wardNumbers.length} ward(s) assigned` });
     } else {
-      // For local/area godowns, just assign panchayath
-      const { error } = await supabase.from("godown_local_bodies").insert({ godown_id: selectedGodown.id, local_body_id: assignLocalBodyId });
+      // Bulk assign for local/area godowns
+      if (selectedLocalBodyIds.length === 0) {
+        toast({ title: "Select at least one panchayath", variant: "destructive" });
+        return;
+      }
+      const existingIds = godownLocalBodies
+        .filter(glb => glb.godown_id === selectedGodown.id)
+        .map(glb => glb.local_body_id);
+      const newIds = selectedLocalBodyIds.filter(id => !existingIds.includes(id));
+      if (newIds.length === 0) {
+        toast({ title: "All selected panchayaths are already assigned", variant: "destructive" });
+        return;
+      }
+      const rows = newIds.map(id => ({ godown_id: selectedGodown.id, local_body_id: id }));
+      const { error } = await supabase.from("godown_local_bodies").insert(rows);
       if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-      else toast({ title: "Panchayath assigned" });
+      else toast({ title: `${newIds.length} panchayath(s) assigned` });
     }
 
     resetAssignForm();
@@ -147,8 +160,10 @@ const GodownsPage = () => {
 
   const resetAssignForm = () => {
     setAssignLocalBodyId("");
+    setSelectedLocalBodyIds([]);
     setSelectedWards([]);
     setAllWards(false);
+    setLocalBodySearch("");
   };
 
   const handleRemoveAssignment = async (glbId: string, godownId: string, localBodyId: string) => {
@@ -182,6 +197,27 @@ const GodownsPage = () => {
   };
 
   const filteredGodowns = godowns.filter(g => g.godown_type === activeTab);
+
+  const filteredLocalBodies = localBodies.filter(lb =>
+    lb.name.toLowerCase().includes(localBodySearch.toLowerCase()) ||
+    lb.body_type.toLowerCase().includes(localBodySearch.toLowerCase())
+  );
+
+  const toggleLocalBody = (id: string) => {
+    setSelectedLocalBodyIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllFilteredLocalBodies = (checked: boolean) => {
+    if (checked) {
+      const allIds = filteredLocalBodies.map(lb => lb.id);
+      setSelectedLocalBodyIds(prev => [...new Set([...prev, ...allIds])]);
+    } else {
+      const filteredIds = new Set(filteredLocalBodies.map(lb => lb.id));
+      setSelectedLocalBodyIds(prev => prev.filter(id => !filteredIds.has(id)));
+    }
+  };
 
   const getWardsForAssignment = (godownId: string, localBodyId: string) => {
     return godownWards
@@ -295,47 +331,87 @@ const GodownsPage = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Label>Select Panchayath</Label>
-                <Select value={assignLocalBodyId} onValueChange={(v) => { setAssignLocalBodyId(v); setSelectedWards([]); setAllWards(false); }}>
-                  <SelectTrigger><SelectValue placeholder="Select panchayath" /></SelectTrigger>
-                  <SelectContent>
-                    {localBodies.map(lb => <SelectItem key={lb.id} value={lb.id}>{lb.name} ({lb.body_type})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {isMicroGodown ? (
+                <>
+                  <div>
+                    <Label>Search Panchayath</Label>
+                    <Input placeholder="Search panchayath..." value={localBodySearch} onChange={e => setLocalBodySearch(e.target.value)} className="mb-2" />
+                    <Select value={assignLocalBodyId} onValueChange={(v) => { setAssignLocalBodyId(v); setSelectedWards([]); setAllWards(false); }}>
+                      <SelectTrigger><SelectValue placeholder="Select panchayath" /></SelectTrigger>
+                      <SelectContent>
+                        {filteredLocalBodies.map(lb => <SelectItem key={lb.id} value={lb.id}>{lb.name} ({lb.body_type})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {isMicroGodown && assignLocalBodyId && selectedLocalBody && (
-                <div>
-                  <Label className="mb-2 block">Select Wards ({selectedLocalBody.ward_count} total)</Label>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Checkbox id="all-wards" checked={allWards} onCheckedChange={(c) => handleAllWardsChange(!!c)} />
-                    <label htmlFor="all-wards" className="text-sm font-medium cursor-pointer">All Wards</label>
-                  </div>
-                  <div className="grid grid-cols-5 gap-2 max-h-48 overflow-y-auto">
-                    {Array.from({ length: selectedLocalBody.ward_count }, (_, i) => i + 1).map(ward => (
-                      <label key={ward} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <Checkbox
-                          checked={selectedWards.includes(ward)}
-                          onCheckedChange={() => toggleWard(ward)}
-                        />
-                        {ward}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedWards.length > 0 && (
-                    <p className="mt-2 text-xs text-muted-foreground">{selectedWards.length} ward(s) selected</p>
+                  {assignLocalBodyId && selectedLocalBody && (
+                    <div>
+                      <Label className="mb-2 block">Select Wards ({selectedLocalBody.ward_count} total)</Label>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Checkbox id="all-wards" checked={allWards} onCheckedChange={(c) => handleAllWardsChange(!!c)} />
+                        <label htmlFor="all-wards" className="text-sm font-medium cursor-pointer">All Wards</label>
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 max-h-48 overflow-y-auto">
+                        {Array.from({ length: selectedLocalBody.ward_count }, (_, i) => i + 1).map(ward => (
+                          <label key={ward} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <Checkbox checked={selectedWards.includes(ward)} onCheckedChange={() => toggleWard(ward)} />
+                            {ward}
+                          </label>
+                        ))}
+                      </div>
+                      {selectedWards.length > 0 && (
+                        <p className="mt-2 text-xs text-muted-foreground">{selectedWards.length} ward(s) selected</p>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
 
-              <Button
-                onClick={handleAssign}
-                disabled={!assignLocalBodyId || (isMicroGodown && selectedWards.length === 0)}
-                className="w-full"
-              >
-                Assign
-              </Button>
+                  <Button onClick={handleAssign} disabled={!assignLocalBodyId || selectedWards.length === 0} className="w-full">
+                    Assign
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label>Search Panchayath</Label>
+                    <Input placeholder="Search panchayath..." value={localBodySearch} onChange={e => setLocalBodySearch(e.target.value)} />
+                  </div>
+                  <div className="flex items-center gap-2 border-b pb-2">
+                    <Checkbox
+                      id="select-all-lb"
+                      checked={filteredLocalBodies.length > 0 && filteredLocalBodies.every(lb => selectedLocalBodyIds.includes(lb.id))}
+                      onCheckedChange={(c) => selectAllFilteredLocalBodies(!!c)}
+                    />
+                    <label htmlFor="select-all-lb" className="text-sm font-medium cursor-pointer">Select All ({filteredLocalBodies.length})</label>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto space-y-1">
+                    {filteredLocalBodies.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-2">No panchayaths found</p>
+                    ) : filteredLocalBodies.map(lb => {
+                      const alreadyAssigned = godownLocalBodies.some(
+                        glb => glb.godown_id === selectedGodown?.id && glb.local_body_id === lb.id
+                      );
+                      return (
+                        <label key={lb.id} className={`flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-muted ${alreadyAssigned ? "opacity-50" : ""}`}>
+                          <Checkbox
+                            checked={selectedLocalBodyIds.includes(lb.id)}
+                            onCheckedChange={() => toggleLocalBody(lb.id)}
+                            disabled={alreadyAssigned}
+                          />
+                          <span>{lb.name}</span>
+                          <Badge variant="outline" className="text-xs ml-auto">{lb.body_type}</Badge>
+                          {alreadyAssigned && <span className="text-xs text-muted-foreground">Assigned</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedLocalBodyIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{selectedLocalBodyIds.length} panchayath(s) selected</p>
+                  )}
+                  <Button onClick={handleAssign} disabled={selectedLocalBodyIds.length === 0} className="w-full">
+                    Assign {selectedLocalBodyIds.length > 0 ? `(${selectedLocalBodyIds.length})` : ""}
+                  </Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
