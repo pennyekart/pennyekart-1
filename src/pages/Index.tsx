@@ -10,7 +10,6 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useAreaProducts } from "@/hooks/useAreaProducts";
-import { Star } from "lucide-react";
 
 const mostOrdered = [
   { name: "Wireless Bluetooth Earbuds", price: 499, originalPrice: 1299, rating: 4.3, image: "https://images.unsplash.com/photo-1590658268037-6bf12f032f55?w=300&h=300&fit=crop" },
@@ -41,20 +40,29 @@ const lowBudget = [
 
 const Index = () => {
   const [platform, setPlatform] = useState("pennyekart");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const { products: areaProducts, loading: areaLoading } = useAreaProducts();
 
   const isCustomer = user && profile?.user_type === "customer";
 
-  // Convert area products to ProductRow format
-  const areaProductRows = areaProducts.map(p => ({
-    name: p.name,
-    price: p.price,
-    originalPrice: p.mrp > p.price ? p.mrp : undefined,
-    rating: 4.5,
-    image: p.image_url || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop",
-  }));
+  // Group area products by category
+  const groupedProducts = areaProducts.reduce<Record<string, typeof areaProducts>>((acc, p) => {
+    const cat = p.category || "Other";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(p);
+    return acc;
+  }, {});
+
+  const toRowFormat = (items: typeof areaProducts) =>
+    items.map(p => ({
+      name: p.name,
+      price: p.price,
+      originalPrice: p.mrp > p.price ? p.mrp : undefined,
+      rating: 4.5,
+      image: p.image_url || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop",
+    }));
 
   const handlePlatformSelect = (id: string) => {
     if (id === "pennyservices") {
@@ -63,6 +71,15 @@ const Index = () => {
     }
     setPlatform(id);
   };
+
+  const handleCategoryClick = (name: string) => {
+    setSelectedCategory(prev => prev === name ? null : name);
+  };
+
+  // Determine which category groups to show
+  const categoriesToShow = selectedCategory
+    ? { [selectedCategory]: groupedProducts[selectedCategory] || [] }
+    : groupedProducts;
 
   return (
     <div className="min-h-screen pb-16 md:pb-0">
@@ -74,13 +91,21 @@ const Index = () => {
       <main className="space-y-2">
         <CategoryBar />
         <BannerCarousel />
-        <GroceryCategories />
+        <GroceryCategories onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
 
         {isCustomer ? (
           areaLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading products for your area...</div>
-          ) : areaProductRows.length > 0 ? (
-            <ProductRow title="Available in Your Area" products={areaProductRows} />
+          ) : Object.keys(groupedProducts).length > 0 ? (
+            Object.entries(categoriesToShow).map(([cat, items]) =>
+              items.length > 0 ? (
+                <ProductRow key={cat} title={cat} products={toRowFormat(items)} />
+              ) : selectedCategory ? (
+                <div key={cat} className="py-8 text-center text-muted-foreground">
+                  No products available in "{cat}" for your area yet.
+                </div>
+              ) : null
+            )
           ) : (
             <div className="py-8 text-center text-muted-foreground">No products available in your area yet.</div>
           )
