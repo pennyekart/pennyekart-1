@@ -1,5 +1,5 @@
 import { Search, User, Wallet, ShoppingCart, LogOut, Package, MapPin, Heart, Bell, ChevronDown } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -7,20 +7,47 @@ const SearchBar = () => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   const displayName = profile?.full_name || profile?.email || user?.email;
   const isLoggedIn = !!user;
 
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    }
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
         setDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (dropdownOpen) {
+      updatePosition();
+      window.addEventListener("scroll", updatePosition, true);
+      window.addEventListener("resize", updatePosition);
+      return () => {
+        window.removeEventListener("scroll", updatePosition, true);
+        window.removeEventListener("resize", updatePosition);
+      };
+    }
+  }, [dropdownOpen, updatePosition]);
 
   const menuItems = [
     { icon: User, label: "My Profile", action: () => navigate("/customer/profile?tab=profile") },
@@ -30,8 +57,39 @@ const SearchBar = () => {
     { icon: Bell, label: "Notifications", action: () => navigate("/customer/profile?tab=notifications") },
   ];
 
+  const DropdownMenu = () => (
+    <div
+      ref={dropdownRef}
+      className="fixed w-56 rounded-lg border bg-card shadow-lg py-2 animate-in fade-in slide-in-from-top-2 duration-200"
+      style={{ top: dropdownPos.top, right: dropdownPos.right, zIndex: 9999 }}
+    >
+      <div className="px-4 py-2 border-b mb-1">
+        <p className="text-sm font-semibold">Your Account</p>
+      </div>
+      {menuItems.map((item) => (
+        <button
+          key={item.label}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          onClick={() => { item.action(); setDropdownOpen(false); }}
+        >
+          <item.icon className="h-4 w-4" />
+          {item.label}
+        </button>
+      ))}
+      <div className="border-t mt-1 pt-1">
+        <button
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+          onClick={async () => { await signOut(); navigate("/"); setDropdownOpen(false); }}
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="relative z-[60] border-b bg-card">
+    <div className="border-b bg-card">
       <div className="container flex items-center gap-3 py-2.5">
         {/* Search */}
         <div className="relative flex-1">
@@ -46,8 +104,9 @@ const SearchBar = () => {
         {/* Actions - desktop */}
         <div className="hidden items-center gap-1 sm:flex">
           {isLoggedIn ? (
-            <div className="relative" ref={dropdownRef}>
+            <>
               <button
+                ref={buttonRef}
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
               >
@@ -57,34 +116,8 @@ const SearchBar = () => {
                 <span className="max-w-[120px] truncate">{displayName}</span>
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
               </button>
-
-              {dropdownOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-[100] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-4 py-2 border-b mb-1">
-                    <p className="text-sm font-semibold">Your Account</p>
-                  </div>
-                  {menuItems.map((item) => (
-                    <button
-                      key={item.label}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                      onClick={() => { item.action(); setDropdownOpen(false); }}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
-                    </button>
-                  ))}
-                  <div className="border-t mt-1 pt-1">
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                      onClick={async () => { await signOut(); navigate("/"); setDropdownOpen(false); }}
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+              {dropdownOpen && <DropdownMenu />}
+            </>
           ) : (
             <button onClick={() => navigate("/customer/login")} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted">
               <User className="h-4 w-4" />
@@ -103,45 +136,18 @@ const SearchBar = () => {
 
         {/* Actions - mobile icons only */}
         <div className="flex items-center gap-2 sm:hidden">
-          <div className="relative" ref={!dropdownOpen ? undefined : dropdownRef}>
-            <button
-              onClick={() => {
-                if (isLoggedIn) setDropdownOpen(!dropdownOpen);
-                else navigate("/customer/login");
-              }}
-              className="rounded-lg p-2 text-foreground hover:bg-muted"
-              aria-label={isLoggedIn ? displayName : "Login"}
-            >
-              <User className="h-5 w-5" />
-            </button>
-
-            {isLoggedIn && dropdownOpen && (
-              <div ref={dropdownRef} className="absolute right-0 top-full mt-2 w-56 rounded-lg border bg-card shadow-lg z-[100] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="px-4 py-2 border-b mb-1">
-                  <p className="text-sm font-semibold">Your Account</p>
-                </div>
-                {menuItems.map((item) => (
-                  <button
-                    key={item.label}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                    onClick={() => { item.action(); setDropdownOpen(false); }}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </button>
-                ))}
-                <div className="border-t mt-1 pt-1">
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                    onClick={async () => { await signOut(); navigate("/"); setDropdownOpen(false); }}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            ref={!dropdownOpen ? undefined : buttonRef}
+            onClick={() => {
+              if (isLoggedIn) setDropdownOpen(!dropdownOpen);
+              else navigate("/customer/login");
+            }}
+            className="rounded-lg p-2 text-foreground hover:bg-muted"
+            aria-label={isLoggedIn ? displayName : "Login"}
+          >
+            <User className="h-5 w-5" />
+          </button>
+          {isLoggedIn && dropdownOpen && <DropdownMenu />}
           <button onClick={() => navigate("/cart")} className="rounded-lg p-2 text-foreground hover:bg-muted" aria-label="Cart">
             <ShoppingCart className="h-5 w-5" />
           </button>
