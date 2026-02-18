@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Star, ArrowLeft, ChevronDown, ChevronUp, Play } from "lucide-react";
@@ -36,9 +36,9 @@ const ProductDetail = () => {
   const [product, setProduct] = useState<ProductData | null>(null);
   const [similarProducts, setSimilarProducts] = useState<ProductData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState(0);
+  const [activeSlide, setActiveSlide] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
-  const [showVideo, setShowVideo] = useState(false);
+  const autoSlideRef = useRef<NodeJS.Timeout | null>(null);
   const { addItem } = useCart();
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -75,9 +75,29 @@ const ProductDetail = () => {
     navigate("/cart");
   };
 
-  const images = product
+  // Build slides: images + video
+  const imageUrls = product
     ? [product.image_url, product.image_url_2, product.image_url_3].filter(Boolean) as string[]
     : [];
+  const embedUrl = product?.video_url ? getYoutubeEmbedUrl(product.video_url, true) : null;
+  const slides: { type: "image" | "video"; src: string }[] = [
+    ...imageUrls.map(src => ({ type: "image" as const, src })),
+    ...(embedUrl ? [{ type: "video" as const, src: embedUrl }] : []),
+  ];
+
+  // Auto-slide logic
+  const startAutoSlide = useCallback(() => {
+    if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+    if (slides.length <= 1) return;
+    autoSlideRef.current = setInterval(() => {
+      setActiveSlide(prev => (prev + 1) % slides.length);
+    }, 3000);
+  }, [slides.length]);
+
+  useEffect(() => {
+    startAutoSlide();
+    return () => { if (autoSlideRef.current) clearInterval(autoSlideRef.current); };
+  }, [startAutoSlide]);
 
   // Fetch godown stock for user's area
   useEffect(() => {
@@ -173,8 +193,7 @@ const ProductDetail = () => {
       setLoading(false);
     };
     fetchProduct();
-    setSelectedImage(0);
-    setShowVideo(false);
+    setActiveSlide(0);
     window.scrollTo(0, 0);
   }, [id]);
 
@@ -201,7 +220,6 @@ const ProductDetail = () => {
     ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
     : 0;
 
-  const embedUrl = product.video_url ? getYoutubeEmbedUrl(product.video_url, true) : null;
 
   const similarRowProducts = similarProducts.map(p => ({
     id: p.id,
@@ -223,53 +241,62 @@ const ProductDetail = () => {
       </header>
 
       <main>
-        {/* Image Gallery */}
+        {/* Auto-sliding Image/Video Gallery */}
         <div className="flex flex-col md:flex-row">
-          {/* Main image / video */}
           <div className="relative w-full md:w-1/2">
-            {showVideo && embedUrl ? (
-              <div className="aspect-square w-full bg-black">
+            {/* Main slide */}
+            <div className="aspect-square w-full overflow-hidden bg-muted">
+              {slides.length > 0 && slides[activeSlide]?.type === "video" ? (
                 <iframe
-                  src={embedUrl}
+                  src={slides[activeSlide].src}
                   className="h-full w-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   title="Product video"
                 />
-              </div>
-            ) : (
-              <div className="aspect-square w-full overflow-hidden bg-muted">
+              ) : (
                 <img
-                  src={images[selectedImage] || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop"}
+                  src={slides[activeSlide]?.src || "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&h=600&fit=crop"}
                   alt={product.name}
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-contain transition-opacity duration-500"
                 />
+              )}
+            </div>
+
+            {/* Dot indicators */}
+            {slides.length > 1 && (
+              <div className="absolute bottom-16 left-1/2 flex -translate-x-1/2 gap-1.5">
+                {slides.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setActiveSlide(i); startAutoSlide(); }}
+                    className={`h-2 w-2 rounded-full transition-all ${
+                      activeSlide === i ? "bg-primary w-4" : "bg-foreground/30"
+                    }`}
+                  />
+                ))}
               </div>
             )}
 
             {/* Thumbnails */}
             <div className="flex gap-2 overflow-x-auto p-3">
-              {images.map((img, i) => (
+              {slides.map((slide, i) => (
                 <button
                   key={i}
-                  onClick={() => { setSelectedImage(i); setShowVideo(false); }}
+                  onClick={() => { setActiveSlide(i); startAutoSlide(); }}
                   className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition-all ${
-                    !showVideo && selectedImage === i ? "border-primary" : "border-border"
+                    activeSlide === i ? "border-primary" : "border-border"
                   }`}
                 >
-                  <img src={img} alt={`View ${i + 1}`} className="h-full w-full object-cover" />
+                  {slide.type === "video" ? (
+                    <div className="flex h-full w-full items-center justify-center bg-muted">
+                      <Play className="h-5 w-5 text-primary" />
+                    </div>
+                  ) : (
+                    <img src={slide.src} alt={`View ${i + 1}`} className="h-full w-full object-cover" />
+                  )}
                 </button>
               ))}
-              {embedUrl && (
-                <button
-                  onClick={() => setShowVideo(true)}
-                  className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 bg-muted transition-all ${
-                    showVideo ? "border-primary" : "border-border"
-                  }`}
-                >
-                  <Play className="h-6 w-6 text-primary" />
-                </button>
-              )}
             </div>
           </div>
 
