@@ -118,6 +118,9 @@ const ProductDetail = () => {
   useEffect(() => {
     const fetchProduct = async () => {
       if (!id) return;
+
+      // Try main products table first
+      let productData: ProductData | null = null;
       const { data } = await supabase
         .from("products")
         .select("id, name, price, mrp, discount_rate, description, image_url, image_url_2, image_url_3, video_url, category, stock")
@@ -126,12 +129,28 @@ const ProductDetail = () => {
         .maybeSingle();
 
       if (data) {
-        setProduct(data as ProductData);
-        if (data.category) {
+        productData = data as ProductData;
+      } else {
+        // Fallback: check seller_products table
+        const { data: sellerData } = await supabase
+          .from("seller_products")
+          .select("id, name, price, mrp, discount_rate, description, image_url, image_url_2, image_url_3, video_url, category, stock")
+          .eq("id", id)
+          .eq("is_active", true)
+          .eq("is_approved", true)
+          .maybeSingle();
+        if (sellerData) {
+          productData = sellerData as ProductData;
+        }
+      }
+
+      if (productData) {
+        setProduct(productData);
+        if (productData.category) {
           const { data: similar } = await supabase
             .from("products")
             .select("id, name, price, mrp, discount_rate, description, image_url, image_url_2, image_url_3, video_url, category, stock")
-            .eq("category", data.category)
+            .eq("category", productData.category)
             .eq("is_active", true)
             .neq("id", id)
             .limit(10);
