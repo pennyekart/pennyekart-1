@@ -597,6 +597,145 @@ export type Database = {
           },
         ]
       }
+      penny_prime_collabs: {
+        Row: {
+          agent_mobile: string
+          agent_user_id: string | null
+          collab_code: string
+          coupon_id: string
+          created_at: string
+          id: string
+          margin_paid_at: string | null
+          margin_paid_by: string | null
+          margin_status: string
+        }
+        Insert: {
+          agent_mobile: string
+          agent_user_id?: string | null
+          collab_code: string
+          coupon_id: string
+          created_at?: string
+          id?: string
+          margin_paid_at?: string | null
+          margin_paid_by?: string | null
+          margin_status?: string
+        }
+        Update: {
+          agent_mobile?: string
+          agent_user_id?: string | null
+          collab_code?: string
+          coupon_id?: string
+          created_at?: string
+          id?: string
+          margin_paid_at?: string | null
+          margin_paid_by?: string | null
+          margin_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "penny_prime_collabs_coupon_id_fkey"
+            columns: ["coupon_id"]
+            isOneToOne: false
+            referencedRelation: "penny_prime_coupons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      penny_prime_coupon_uses: {
+        Row: {
+          agent_margin_amount: number
+          collab_id: string
+          customer_user_id: string | null
+          discount_amount: number
+          id: string
+          order_id: string | null
+          used_at: string
+        }
+        Insert: {
+          agent_margin_amount?: number
+          collab_id: string
+          customer_user_id?: string | null
+          discount_amount?: number
+          id?: string
+          order_id?: string | null
+          used_at?: string
+        }
+        Update: {
+          agent_margin_amount?: number
+          collab_id?: string
+          customer_user_id?: string | null
+          discount_amount?: number
+          id?: string
+          order_id?: string | null
+          used_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "penny_prime_coupon_uses_collab_id_fkey"
+            columns: ["collab_id"]
+            isOneToOne: false
+            referencedRelation: "penny_prime_collabs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "penny_prime_coupon_uses_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      penny_prime_coupons: {
+        Row: {
+          agent_margin_type: string
+          agent_margin_value: number
+          created_at: string
+          customer_discount_type: string
+          customer_discount_value: number
+          id: string
+          is_active: boolean
+          product_id: string
+          seller_code: string
+          seller_id: string
+          updated_at: string
+        }
+        Insert: {
+          agent_margin_type?: string
+          agent_margin_value?: number
+          created_at?: string
+          customer_discount_type?: string
+          customer_discount_value?: number
+          id?: string
+          is_active?: boolean
+          product_id: string
+          seller_code: string
+          seller_id: string
+          updated_at?: string
+        }
+        Update: {
+          agent_margin_type?: string
+          agent_margin_value?: number
+          created_at?: string
+          customer_discount_type?: string
+          customer_discount_value?: number
+          id?: string
+          is_active?: boolean
+          product_id?: string
+          seller_code?: string
+          seller_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "penny_prime_coupons_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           action: string

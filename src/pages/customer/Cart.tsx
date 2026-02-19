@@ -20,8 +20,9 @@ const Cart = () => {
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const [couponCode, setCouponCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; collabId?: string } | null>(null);
   const [couponError, setCouponError] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
   const [useWallet, setUseWallet] = useState(false);
   const [walletBalance] = useState(0); // TODO: fetch from user wallet
 
@@ -33,11 +34,49 @@ const Cart = () => {
   const finalAmount = totalPrice + platformFee - couponDiscount - walletDeduction;
   const hasComingSoonItems = items.some(i => i.coming_soon);
 
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = async () => {
     setCouponError("");
-    if (!couponCode.trim()) return;
-    // TODO: validate coupon against backend
-    setCouponError("Invalid coupon code");
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    setCouponLoading(true);
+    try {
+      // Look up penny prime collab code
+      const { data: collab, error } = await supabase
+        .from("penny_prime_collabs")
+        .select(`
+          id, collab_code,
+          penny_prime_coupons (
+            customer_discount_type, customer_discount_value,
+            products (id, name, price)
+          )
+        `)
+        .eq("collab_code", code)
+        .maybeSingle();
+
+      if (error || !collab) {
+        setCouponError("Invalid or expired coupon code");
+        setCouponLoading(false);
+        return;
+      }
+
+      const coupon = (collab as any).penny_prime_coupons;
+      if (!coupon) { setCouponError("Coupon not found"); setCouponLoading(false); return; }
+
+      // Calculate discount
+      let discount = 0;
+      if (coupon.customer_discount_type === "amount") {
+        discount = coupon.customer_discount_value;
+      } else {
+        discount = (totalPrice * coupon.customer_discount_value) / 100;
+      }
+      discount = Math.min(discount, totalPrice);
+
+      setAppliedCoupon({ code, discount, collabId: collab.id });
+    } catch {
+      setCouponError("Failed to validate coupon");
+    } finally {
+      setCouponLoading(false);
+    }
   };
 
   const handleRemoveCoupon = () => {
@@ -120,10 +159,23 @@ const Cart = () => {
         });
       }
 
-      // Insert all orders
+      // Insert all orders and capture first order id
+      let firstOrderId: string | null = null;
       for (const order of ordersToInsert) {
-        const { error } = await supabase.from("orders").insert(order);
+        const { data: insertedOrder, error } = await supabase.from("orders").insert(order).select("id").single();
         if (error) throw error;
+        if (!firstOrderId && insertedOrder) firstOrderId = insertedOrder.id;
+      }
+
+      // Record penny prime coupon use if applied
+      if (appliedCoupon?.collabId && firstOrderId && user) {
+        await supabase.from("penny_prime_coupon_uses").insert({
+          collab_id: appliedCoupon.collabId,
+          order_id: firstOrderId,
+          customer_user_id: user.id,
+          discount_amount: couponDiscount,
+          agent_margin_amount: 0, // will be calculated by admin on payout
+        });
       }
 
       clearCart();

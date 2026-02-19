@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   LayoutDashboard, Users, ShieldCheck, Package, ShoppingCart,
-  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal, BarChart3, Wallet,
+  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal, BarChart3, Wallet, Handshake,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -26,6 +26,7 @@ const navItems = [
   { label: "Stock Control", icon: BarChart3, path: "/admin/stock-control", perm: "read_stock" },
   { label: "App Settings", icon: SlidersHorizontal, path: "/admin/settings", perm: "read_products" },
   { label: "Wallets", icon: Wallet, path: "/admin/wallets", perm: "read_users" },
+  { label: "Penny Prime", icon: Handshake, path: "/admin/penny-prime", perm: "read_orders" },
   { label: "Reports", icon: BarChart3, path: "/admin/reports", perm: "read_orders" },
 ];
 

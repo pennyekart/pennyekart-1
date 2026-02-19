@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Package, Plus, LogOut, Store, ShoppingCart, Wallet, Star, PackagePlus, Pencil, BarChart3, TrendingUp, MapPin, ArrowDownLeft, Clock, Settings } from "lucide-react";
+import { Package, Plus, LogOut, Store, ShoppingCart, Wallet, Star, PackagePlus, Pencil, BarChart3, TrendingUp, MapPin, ArrowDownLeft, Clock, Settings, Tag } from "lucide-react";
+import PennyPrimeCoupons from "@/components/selling-partner/PennyPrimeCoupons";
 import { useToast } from "@/hooks/use-toast";
 import ImageUpload from "@/components/admin/ImageUpload";
 import logo from "@/assets/logo.png";
@@ -419,11 +420,12 @@ const SellingPartnerDashboard = () => {
         </div>
 
         <Tabs defaultValue="products">
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className="w-full grid grid-cols-6">
             <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
+            <TabsTrigger value="prime" className="gap-1"><Tag className="h-3.5 w-3.5" />Prime</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
@@ -818,6 +820,11 @@ const SellingPartnerDashboard = () => {
                 })}
               </div>
             )}
+          </TabsContent>
+
+          {/* PENNY PRIME TAB */}
+          <TabsContent value="prime" className="space-y-4">
+            <PennyPrimeCoupons />
           </TabsContent>
 
           {/* PROFILE TAB */}
