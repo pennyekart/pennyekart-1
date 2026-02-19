@@ -43,13 +43,7 @@ const Cart = () => {
       // Look up penny prime collab code
       const { data: collab, error } = await supabase
         .from("penny_prime_collabs")
-        .select(`
-          id, collab_code,
-          penny_prime_coupons (
-            customer_discount_type, customer_discount_value,
-            products (id, name, price)
-          )
-        `)
+        .select("id, collab_code, coupon_id")
         .eq("collab_code", code)
         .maybeSingle();
 
@@ -59,8 +53,18 @@ const Cart = () => {
         return;
       }
 
-      const coupon = (collab as any).penny_prime_coupons;
-      if (!coupon) { setCouponError("Coupon not found"); setCouponLoading(false); return; }
+      // Fetch the coupon separately (no FK join available)
+      const { data: coupon } = await supabase
+        .from("penny_prime_coupons")
+        .select("customer_discount_type, customer_discount_value, is_active")
+        .eq("id", collab.coupon_id)
+        .maybeSingle();
+
+      if (!coupon || !coupon.is_active) {
+        setCouponError("This coupon is no longer active");
+        setCouponLoading(false);
+        return;
+      }
 
       // Calculate discount
       let discount = 0;
