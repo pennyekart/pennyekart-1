@@ -25,6 +25,7 @@ const navItems = [
   { label: "Offers & Features", icon: Star, path: "/admin/offers", perm: "read_products" },
   { label: "Stock Control", icon: BarChart3, path: "/admin/stock-control", perm: "read_stock" },
   { label: "App Settings", icon: SlidersHorizontal, path: "/admin/settings", perm: "read_products" },
+  { label: "Reports", icon: BarChart3, path: "/admin/reports", perm: "read_orders" },
 ];
 
 const AdminLayout = ({ children }: { children: ReactNode }) => {
