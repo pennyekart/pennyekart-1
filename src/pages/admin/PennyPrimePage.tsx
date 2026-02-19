@@ -30,10 +30,25 @@ interface Collab {
   penny_prime_coupon_uses: { id: string; order_id: string | null; agent_margin_amount: number; used_at: string }[];
 }
 
+interface AllCoupon {
+  id: string;
+  seller_code: string;
+  is_active: boolean;
+  customer_discount_type: string;
+  customer_discount_value: number;
+  agent_margin_type: string;
+  agent_margin_value: number;
+  created_at: string;
+  profiles: { full_name: string | null; company_name: string | null; mobile_number: string | null } | null;
+  seller_products: { name: string; price: number } | null;
+}
+
 const PennyPrimePage = () => {
   const { toast: toastHook } = useToast();
   const [collabs, setCollabs] = useState<Collab[]>([]);
+  const [allCoupons, setAllCoupons] = useState<AllCoupon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [couponsLoading, setCouponsLoading] = useState(true);
   const [payDialogOpen, setPayDialogOpen] = useState(false);
   const [selectedCollab, setSelectedCollab] = useState<Collab | null>(null);
   const [paying, setPaying] = useState(false);
@@ -61,8 +76,23 @@ const PennyPrimePage = () => {
     setLoading(false);
   };
 
+  const fetchAllCoupons = async () => {
+    setCouponsLoading(true);
+    const { data, error } = await supabase
+      .from("penny_prime_coupons")
+      .select(`
+        *,
+        profiles!penny_prime_coupons_seller_id_fkey (full_name, company_name, mobile_number),
+        seller_products!penny_prime_coupons_product_id_fkey (name, price)
+      `)
+      .order("created_at", { ascending: false });
+    if (!error) setAllCoupons((data as any) ?? []);
+    setCouponsLoading(false);
+  };
+
   useEffect(() => {
     fetchCollabs();
+    fetchAllCoupons();
   }, []);
 
   const openPayDialog = (collab: Collab) => {
@@ -247,12 +277,64 @@ const PennyPrimePage = () => {
           </Card>
         </div>
 
-        <Tabs defaultValue="pending">
+        <Tabs defaultValue="coupons">
           <TabsList>
-            <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
+            <TabsTrigger value="coupons">Seller Coupons ({allCoupons.length})</TabsTrigger>
+            <TabsTrigger value="pending">Pending Payout ({pending.length})</TabsTrigger>
             <TabsTrigger value="paid">Paid ({paid.length})</TabsTrigger>
-            <TabsTrigger value="all">All ({collabs.length})</TabsTrigger>
+            <TabsTrigger value="all">All Collabs ({collabs.length})</TabsTrigger>
           </TabsList>
+
+          {/* All seller coupons */}
+          <TabsContent value="coupons" className="mt-4">
+            {couponsLoading ? (
+              <p className="text-muted-foreground text-sm">Loading...</p>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Seller</TableHead>
+                      <TableHead>Mobile</TableHead>
+                      <TableHead>Customer Discount</TableHead>
+                      <TableHead>Agent Margin</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allCoupons.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No coupons found</TableCell>
+                      </TableRow>
+                    ) : (
+                      allCoupons.map(c => (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-mono font-bold text-primary text-xs">{c.seller_code}</TableCell>
+                          <TableCell className="text-xs">{c.seller_products?.name ?? "—"} {c.seller_products ? `₹${c.seller_products.price}` : ""}</TableCell>
+                          <TableCell className="text-xs">{c.profiles?.company_name || c.profiles?.full_name || "—"}</TableCell>
+                          <TableCell className="text-xs">{c.profiles?.mobile_number ?? "—"}</TableCell>
+                          <TableCell className="text-xs">
+                            {c.customer_discount_type === "percent" ? `${c.customer_discount_value}%` : `₹${c.customer_discount_value}`} off
+                          </TableCell>
+                          <TableCell className="text-xs font-semibold text-primary">
+                            {c.agent_margin_type === "percent" ? `${c.agent_margin_value}%` : `₹${c.agent_margin_value}`}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={c.is_active ? "default" : "outline"} className="text-xs">
+                              {c.is_active ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+
           <TabsContent value="pending" className="mt-4">
             {loading ? <p className="text-muted-foreground text-sm">Loading...</p> : <CollabTable items={pending} />}
           </TabsContent>
