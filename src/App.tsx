@@ -30,6 +30,7 @@ import PennyServices from "./pages/PennyServices";
 import ServiceDetail from "./pages/ServiceDetail";
 import PennyCarbs from "./pages/PennyCarbs";
 import AppSettingsPage from "./pages/admin/AppSettingsPage";
+import StockControlPage from "./pages/admin/StockControlPage";
 import DeliveryStaffSignup from "./pages/delivery-staff/Signup";
 import DeliveryStaffLogin from "./pages/delivery-staff/Login";
 import DeliveryStaffForgotPassword from "./pages/delivery-staff/ForgotPasswordPage";
@@ -79,6 +80,7 @@ const App = () => {
               <Route path="/services" element={<PennyServices />} />
               <Route path="/services/:id" element={<ServiceDetail />} />
               <Route path="/pennycarbs" element={<PennyCarbs />} />
+              <Route path="/admin/stock-control" element={<ProtectedRoute requirePermission="read_stock"><StockControlPage /></ProtectedRoute>} />
               <Route path="/admin/settings" element={<ProtectedRoute requirePermission="read_products"><AppSettingsPage /></ProtectedRoute>} />
 
               {/* Delivery Staff */}

@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   LayoutDashboard, Users, ShieldCheck, Package, ShoppingCart,
-  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal,
+  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +23,7 @@ const navItems = [
   { label: "Delivery Staff", icon: Truck, path: "/admin/delivery", perm: "read_users" },
   { label: "Selling Partners", icon: Store, path: "/admin/sellers", perm: "read_users" },
   { label: "Offers & Features", icon: Star, path: "/admin/offers", perm: "read_products" },
+  { label: "Stock Control", icon: BarChart3, path: "/admin/stock-control", perm: "read_stock" },
   { label: "App Settings", icon: SlidersHorizontal, path: "/admin/settings", perm: "read_products" },
 ];
 
