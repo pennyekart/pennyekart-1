@@ -549,6 +549,7 @@ export type Database = {
       products: {
         Row: {
           category: string | null
+          coming_soon: boolean
           created_at: string
           created_by: string | null
           description: string | null
@@ -570,6 +571,7 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          coming_soon?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -591,6 +593,7 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          coming_soon?: boolean
           created_at?: string
           created_by?: string | null
           description?: string | null
