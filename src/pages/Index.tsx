@@ -92,18 +92,32 @@ const Index = () => {
       return <div className="py-8 text-center text-muted-foreground">Loading products...</div>;
     }
 
-    // If category filter is active, show filtered products grouped by category
+    // If category filter is active, show selected category first then others
     if (selectedCategory) {
       const sourceProducts = isCustomer ? groupedByCategory : sectionByCategory;
-      const filtered = sourceProducts[selectedCategory] || [];
-      if (filtered.length === 0) {
-        return (
-          <div className="py-8 text-center text-muted-foreground">
+      const selectedItems = sourceProducts[selectedCategory] || [];
+      const rows: React.ReactNode[] = [];
+
+      if (selectedItems.length > 0) {
+        rows.push(<ProductRow key={selectedCategory} title={selectedCategory} products={toRowFormat(selectedItems)} />);
+      } else {
+        rows.push(
+          <div key="empty" className="py-4 text-center text-muted-foreground">
             No products available in "{selectedCategory}" yet.
           </div>
         );
       }
-      return <ProductRow title={selectedCategory} products={toRowFormat(filtered)} />;
+
+      // Show all other categories after
+      Object.entries(sourceProducts)
+        .filter(([cat]) => cat !== selectedCategory)
+        .forEach(([cat, items]) => {
+          if (items.length > 0) {
+            rows.push(<ProductRow key={cat} title={cat} products={toRowFormat(items)} />);
+          }
+        });
+
+      return rows;
     }
 
     // For logged-in customers: show section rows from area products, then remaining by category
