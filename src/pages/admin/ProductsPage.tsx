@@ -14,6 +14,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { Plus, Pencil, Trash2, ExternalLink, Clock, Store, CheckCircle, XCircle } from "lucide-react";
 import ImageUpload from "@/components/admin/ImageUpload";
+import ProductVariants from "@/components/admin/ProductVariants";
 import { useNavigate } from "react-router-dom";
 
 interface Product {
@@ -41,7 +42,7 @@ interface SellerProduct {
 }
 
 interface Category {
-  id: string; name: string; category_type: string;
+  id: string; name: string; category_type: string; variation_type: string | null;
 }
 
 const sectionOptions = [
@@ -81,7 +82,7 @@ const ProductsPage = () => {
   };
 
   const fetchCategories = async () => {
-    const { data } = await supabase.from("categories").select("id, name, category_type").eq("is_active", true).order("sort_order");
+    const { data } = await supabase.from("categories").select("id, name, category_type, variation_type").eq("is_active", true).order("sort_order");
     setCategories((data as Category[]) ?? []);
   };
 
@@ -190,6 +191,20 @@ const ProductsPage = () => {
             <div className="flex items-center gap-2"><Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} /><Label>Active</Label></div>
             <div className="flex items-center gap-2"><Switch checked={form.coming_soon} onCheckedChange={(v) => setForm({ ...form, coming_soon: v })} /><Label>Coming Soon</Label></div>
           </div>
+          {(() => {
+            const selectedCat = categories.find(c => c.name === form.category);
+            if (selectedCat?.variation_type) {
+              return (
+                <ProductVariants
+                  productId={editId}
+                  variationType={selectedCat.variation_type}
+                  basePrice={form.price}
+                  baseMrp={form.mrp}
+                />
+              );
+            }
+            return null;
+          })()}
           <Button className="w-full" onClick={handleSave}>Save</Button>
         </div>
       </DialogContent>
