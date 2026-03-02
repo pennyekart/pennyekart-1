@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,8 +23,9 @@ interface LocalBody {
 const CUSTOMER_PASSWORD = "pennyekart_customer_2024";
 
 const CustomerSignup = () => {
+  const location = useLocation();
   const [fullName, setFullName] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [mobile, setMobile] = useState((location.state as any)?.mobile || "");
   const [districtId, setDistrictId] = useState("");
   const [localBodyId, setLocalBodyId] = useState("");
   const [wardNumber, setWardNumber] = useState("");

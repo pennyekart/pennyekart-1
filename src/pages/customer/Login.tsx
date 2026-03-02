@@ -44,11 +44,9 @@ const CustomerLogin = () => {
       clearTimeout(timeoutRef.current);
 
       if (error) {
-        const newCount = failCount + 1;
-        setFailCount(newCount);
-        if (newCount >= 2) setShowLiteSuggestion(true);
-        toast({ title: "Login failed", description: "Mobile number not registered or invalid.", variant: "destructive" });
         setLoading(false);
+        toast({ title: "Not registered", description: "Redirecting to sign up...", variant: "default" });
+        setTimeout(() => navigate("/customer/signup", { state: { mobile } }), 800);
         return;
       }
 
