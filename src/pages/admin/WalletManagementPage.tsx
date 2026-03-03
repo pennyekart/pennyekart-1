@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw, Gift, ShoppingCart, Moon, CreditCard, Search, Eye } from "lucide-react";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw, Gift, ShoppingCart, Moon, CreditCard, Search, Eye, ShieldCheck } from "lucide-react";
 
 interface WalletRow {
   id: string;
@@ -80,6 +80,14 @@ const RULE_DEFINITIONS = [
     enabledKey: "wallet_rule_min_order_enabled",
     amountKey: "wallet_min_usage_amount",
   },
+  {
+    key: "min_purchase_redeem",
+    label: "Wallet Redeem Min Purchase Amount",
+    description: "Wallet option is hidden at checkout unless the order total reaches this amount (e.g. ₹500). If disabled, wallet is always visible.",
+    icon: <ShieldCheck className="h-5 w-5 text-teal-600" />,
+    enabledKey: "wallet_rule_min_purchase_enabled",
+    amountKey: "wallet_rule_min_purchase_amount",
+  },
 ];
 
 const WalletManagementPage = () => {
@@ -127,7 +135,7 @@ const WalletManagementPage = () => {
       RULE_DEFINITIONS.map((def) => ({
         ...def,
         enabled: settingsMap.get(def.enabledKey) === "true",
-        amount: settingsMap.get(def.amountKey) ?? (def.key === "min_order_wallet" ? "100" : "0"),
+        amount: settingsMap.get(def.amountKey) ?? (def.key === "min_order_wallet" ? "100" : def.key === "min_purchase_redeem" ? "500" : "0"),
       }))
     );
   };
