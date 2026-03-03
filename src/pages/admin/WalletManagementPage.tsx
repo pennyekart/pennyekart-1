@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw, Gift, ShoppingCart, Moon, CreditCard } from "lucide-react";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw, Gift, ShoppingCart, Moon, CreditCard, Search, Eye } from "lucide-react";
 
 interface WalletRow {
   id: string;
@@ -89,6 +89,7 @@ const WalletManagementPage = () => {
   const [sellerWallets, setSellerWallets] = useState<WalletRow[]>([]);
   const [deliveryWallets, setDeliveryWallets] = useState<WalletRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Transaction dialog
   const [txnOpen, setTxnOpen] = useState(false);
@@ -112,6 +113,10 @@ const WalletManagementPage = () => {
   const [histWallet, setHistWallet] = useState<WalletRow | null>(null);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [histLoading, setHistLoading] = useState(false);
+
+  // Detail view dialog
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailWallet, setDetailWallet] = useState<WalletRow | null>(null);
 
   const fetchWalletRules = async () => {
     const allKeys = RULE_DEFINITIONS.flatMap((r) => [r.enabledKey, r.amountKey]);
@@ -293,48 +298,63 @@ const WalletManagementPage = () => {
     setHistLoading(false);
   };
 
-  const renderWalletTable = (wallets: WalletRow[], type: string) => (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Email</TableHead>
-          <TableHead className="text-right">Balance (₹)</TableHead>
-          {type === "delivery" && <TableHead className="text-right">Earnings (₹)</TableHead>}
-          {type === "customer" && <TableHead className="text-right">Min Usage (₹)</TableHead>}
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {wallets.length === 0 && (
-          <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No wallets found</TableCell></TableRow>
-        )}
-        {wallets.map((w) => (
-          <TableRow key={w.id}>
-            <TableCell className="font-medium">{w.user_name}</TableCell>
-            <TableCell className="text-muted-foreground">{w.email}</TableCell>
-            <TableCell className="text-right font-semibold">₹{Number(w.balance).toFixed(2)}</TableCell>
-            {type === "delivery" && <TableCell className="text-right">₹{Number(w.earning_balance ?? 0).toFixed(2)}</TableCell>}
-            {type === "customer" && <TableCell className="text-right">₹{Number(w.min_usage_amount ?? 0).toFixed(2)}</TableCell>}
-            <TableCell className="text-right space-x-1">
-              <Button size="sm" variant="outline" onClick={() => { setTxnWallet(w); setTxnType("credit"); setTxnOpen(true); }}>
-                <ArrowUpCircle className="h-3.5 w-3.5 mr-1" /> Credit
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => { setTxnWallet(w); setTxnType("debit"); setTxnOpen(true); }}>
-                <ArrowDownCircle className="h-3.5 w-3.5 mr-1" /> Debit
-              </Button>
-              {type === "customer" && (
-                <Button size="sm" variant="outline" onClick={() => { setMinWallet(w); setMinAmount(String(w.min_usage_amount ?? 100)); setMinOpen(true); }}>
-                  <Settings className="h-3.5 w-3.5 mr-1" /> Min
-                </Button>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => fetchTransactions(w)}>History</Button>
-            </TableCell>
+  const filterWallets = (wallets: WalletRow[]) => {
+    if (!searchQuery.trim()) return wallets;
+    const q = searchQuery.toLowerCase();
+    return wallets.filter(
+      (w) => w.user_name.toLowerCase().includes(q) || w.email.toLowerCase().includes(q)
+    );
+  };
+
+  const renderWalletTable = (wallets: WalletRow[], type: string) => {
+    const filtered = filterWallets(wallets);
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead className="hidden sm:table-cell">Email</TableHead>
+            <TableHead className="text-right">Balance (₹)</TableHead>
+            {type === "delivery" && <TableHead className="text-right hidden sm:table-cell">Earnings (₹)</TableHead>}
+            {type === "customer" && <TableHead className="text-right hidden sm:table-cell">Min Usage (₹)</TableHead>}
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
+        </TableHeader>
+        <TableBody>
+          {filtered.length === 0 && (
+            <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No wallets found</TableCell></TableRow>
+          )}
+          {filtered.map((w) => (
+            <TableRow key={w.id}>
+              <TableCell className="font-medium">{w.user_name}</TableCell>
+              <TableCell className="text-muted-foreground hidden sm:table-cell">{w.email}</TableCell>
+              <TableCell className="text-right font-semibold">₹{Number(w.balance).toFixed(2)}</TableCell>
+              {type === "delivery" && <TableCell className="text-right hidden sm:table-cell">₹{Number(w.earning_balance ?? 0).toFixed(2)}</TableCell>}
+              {type === "customer" && <TableCell className="text-right hidden sm:table-cell">₹{Number(w.min_usage_amount ?? 0).toFixed(2)}</TableCell>}
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <Button size="icon" variant="outline" className="h-7 w-7" title="Credit" onClick={() => { setTxnWallet(w); setTxnType("credit"); setTxnOpen(true); }}>
+                    <ArrowUpCircle className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="outline" className="h-7 w-7" title="Debit" onClick={() => { setTxnWallet(w); setTxnType("debit"); setTxnOpen(true); }}>
+                    <ArrowDownCircle className="h-3.5 w-3.5" />
+                  </Button>
+                  {type === "customer" && (
+                    <Button size="icon" variant="outline" className="h-7 w-7" title="Set Min Amount" onClick={() => { setMinWallet(w); setMinAmount(String(w.min_usage_amount ?? 100)); setMinOpen(true); }}>
+                      <Settings className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="View Details" onClick={() => { setDetailWallet(w); setDetailOpen(true); }}>
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
 
   const totalBalance = (wallets: WalletRow[]) => wallets.reduce((s, w) => s + Number(w.balance), 0);
 
@@ -439,19 +459,47 @@ const WalletManagementPage = () => {
           <TabsContent value="customer">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Customer Wallets</CardTitle>
-                <p className="text-xs text-muted-foreground">Customers must reach the minimum usage amount before they can use wallet balance for orders.</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">Customer Wallets</CardTitle>
+                    <p className="text-xs text-muted-foreground">Customers must reach the minimum usage amount before they can use wallet balance for orders.</p>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search by name or email..." className="pl-8 h-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>{renderWalletTable(customerWallets, "customer")}</CardContent>
             </Card>
           </TabsContent>
           <TabsContent value="seller">
-            <Card><CardHeader><CardTitle className="text-base">Seller Wallets</CardTitle></CardHeader>
-              <CardContent>{renderWalletTable(sellerWallets, "seller")}</CardContent></Card>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <CardTitle className="text-base">Seller Wallets</CardTitle>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search by name or email..." className="pl-8 h-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>{renderWalletTable(sellerWallets, "seller")}</CardContent>
+            </Card>
           </TabsContent>
           <TabsContent value="delivery">
-            <Card><CardHeader><CardTitle className="text-base">Delivery Staff Wallets</CardTitle></CardHeader>
-              <CardContent>{renderWalletTable(deliveryWallets, "delivery")}</CardContent></Card>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <CardTitle className="text-base">Delivery Staff Wallets</CardTitle>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search by name or email..." className="pl-8 h-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>{renderWalletTable(deliveryWallets, "delivery")}</CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -519,6 +567,40 @@ const WalletManagementPage = () => {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Wallet Detail Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Wallet Details — {detailWallet?.user_name}</DialogTitle></DialogHeader>
+          {detailWallet && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Name</span><p className="font-medium">{detailWallet.user_name}</p></div>
+                <div><span className="text-muted-foreground">Email</span><p className="font-medium break-all">{detailWallet.email || "N/A"}</p></div>
+                <div><span className="text-muted-foreground">Balance</span><p className="font-semibold text-lg">₹{Number(detailWallet.balance).toFixed(2)}</p></div>
+                {detailWallet.earning_balance !== undefined && (
+                  <div><span className="text-muted-foreground">Earnings</span><p className="font-semibold">₹{Number(detailWallet.earning_balance).toFixed(2)}</p></div>
+                )}
+                {detailWallet.min_usage_amount !== undefined && (
+                  <div><span className="text-muted-foreground">Min Usage</span><p className="font-medium">₹{Number(detailWallet.min_usage_amount).toFixed(2)}</p></div>
+                )}
+                <div><span className="text-muted-foreground">Created</span><p className="font-medium">{new Date(detailWallet.created_at).toLocaleDateString()}</p></div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailOpen(false); setTxnWallet(detailWallet); setTxnType("credit"); setTxnOpen(true); }}>
+                  <ArrowUpCircle className="h-3.5 w-3.5 mr-1" /> Credit
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailOpen(false); setTxnWallet(detailWallet); setTxnType("debit"); setTxnOpen(true); }}>
+                  <ArrowDownCircle className="h-3.5 w-3.5 mr-1" /> Debit
+                </Button>
+                <Button size="sm" variant="outline" className="flex-1" onClick={() => { setDetailOpen(false); fetchTransactions(detailWallet); }}>
+                  History
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
