@@ -367,6 +367,57 @@ const Cart = () => {
         setWalletBalance(newBalance);
       }
 
+      // --- Wallet Reward Rules (first purchase + midnight) ---
+      if (user && walletId) {
+        try {
+          const ruleKeys = [
+            "wallet_rule_first_purchase_enabled", "wallet_rule_first_purchase_amount",
+            "wallet_rule_midnight_enabled", "wallet_rule_midnight_amount",
+          ];
+          const { data: settings } = await supabase.from("app_settings").select("key, value").in("key", ruleKeys);
+          const sm = new Map((settings ?? []).map((s: any) => [s.key, s.value]));
+
+          let bonusTotal = 0;
+          const bonusItems: { amount: number; desc: string }[] = [];
+
+          // First purchase bonus
+          if (sm.get("wallet_rule_first_purchase_enabled") === "true") {
+            const fpAmount = Number(sm.get("wallet_rule_first_purchase_amount") || 0);
+            if (fpAmount > 0) {
+              const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+              if ((count ?? 0) <= ordersToInsert.length) {
+                bonusTotal += fpAmount;
+                bonusItems.push({ amount: fpAmount, desc: `First purchase reward: ₹${fpAmount}` });
+              }
+            }
+          }
+
+          // Midnight order bonus (12 AM – 5 AM)
+          if (sm.get("wallet_rule_midnight_enabled") === "true") {
+            const midAmount = Number(sm.get("wallet_rule_midnight_amount") || 0);
+            const hour = new Date().getHours();
+            if (midAmount > 0 && hour >= 0 && hour < 5) {
+              bonusTotal += midAmount;
+              bonusItems.push({ amount: midAmount, desc: `Midnight order bonus: ₹${midAmount}` });
+            }
+          }
+
+          if (bonusTotal > 0 && walletId) {
+            const currentBal = useWallet ? walletBalance - walletDeduction : walletBalance;
+            await supabase.from("customer_wallets").update({ balance: currentBal + bonusTotal } as any).eq("id", walletId);
+            for (const item of bonusItems) {
+              await supabase.from("customer_wallet_transactions").insert({
+                wallet_id: walletId, customer_user_id: user.id,
+                type: "credit", amount: item.amount,
+                description: item.desc, order_id: firstOrderId,
+              } as any);
+            }
+          }
+        } catch (e) {
+          console.error("Wallet bonus error:", e);
+        }
+      }
+
       clearCart();
       setShowPayment(false);
       const orderCount = ordersToInsert.length;

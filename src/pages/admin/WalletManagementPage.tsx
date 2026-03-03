@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
-import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw } from "lucide-react";
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Settings, RefreshCw, Gift, ShoppingCart, Moon, CreditCard } from "lucide-react";
 
 interface WalletRow {
   id: string;
@@ -35,9 +36,55 @@ interface TransactionRow {
   order_id: string | null;
 }
 
+interface WalletRule {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  enabledKey: string;
+  amountKey: string;
+  enabled: boolean;
+  amount: string;
+}
+
+const RULE_DEFINITIONS = [
+  {
+    key: "signup_bonus",
+    label: "New Signup Bonus",
+    description: "Reward customers with wallet points when they sign up for the first time.",
+    icon: <Gift className="h-5 w-5 text-green-600" />,
+    enabledKey: "wallet_rule_signup_enabled",
+    amountKey: "wallet_rule_signup_amount",
+  },
+  {
+    key: "first_purchase",
+    label: "First Purchase Reward",
+    description: "Credit wallet points after a customer completes their first order.",
+    icon: <ShoppingCart className="h-5 w-5 text-blue-600" />,
+    enabledKey: "wallet_rule_first_purchase_enabled",
+    amountKey: "wallet_rule_first_purchase_amount",
+  },
+  {
+    key: "midnight_order",
+    label: "Midnight Order Bonus",
+    description: "Extra wallet points for orders placed between 12:00 AM – 5:00 AM.",
+    icon: <Moon className="h-5 w-5 text-purple-600" />,
+    enabledKey: "wallet_rule_midnight_enabled",
+    amountKey: "wallet_rule_midnight_amount",
+  },
+  {
+    key: "min_order_wallet",
+    label: "Wallet Applicable Min Order",
+    description: "Minimum cart/order amount required for customers to redeem wallet balance at checkout.",
+    icon: <CreditCard className="h-5 w-5 text-orange-600" />,
+    enabledKey: "wallet_rule_min_order_enabled",
+    amountKey: "wallet_min_usage_amount",
+  },
+];
+
 const WalletManagementPage = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("customer");
+  const [activeTab, setActiveTab] = useState("rules");
   const [customerWallets, setCustomerWallets] = useState<WalletRow[]>([]);
   const [sellerWallets, setSellerWallets] = useState<WalletRow[]>([]);
   const [deliveryWallets, setDeliveryWallets] = useState<WalletRow[]>([]);
@@ -56,9 +103,9 @@ const WalletManagementPage = () => {
   const [minWallet, setMinWallet] = useState<WalletRow | null>(null);
   const [minAmount, setMinAmount] = useState("");
 
-  // Global wallet rule
-  const [globalMinUsage, setGlobalMinUsage] = useState("");
-  const [globalRuleLoading, setGlobalRuleLoading] = useState(false);
+  // Wallet rules
+  const [walletRules, setWalletRules] = useState<WalletRule[]>([]);
+  const [rulesSaving, setRulesSaving] = useState(false);
 
   // Transaction history
   const [histOpen, setHistOpen] = useState(false);
@@ -66,41 +113,71 @@ const WalletManagementPage = () => {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [histLoading, setHistLoading] = useState(false);
 
-  const fetchGlobalRule = async () => {
-    const { data } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "wallet_min_usage_amount")
-      .maybeSingle();
-    setGlobalMinUsage(data?.value ?? "100");
+  const fetchWalletRules = async () => {
+    const allKeys = RULE_DEFINITIONS.flatMap((r) => [r.enabledKey, r.amountKey]);
+    const { data } = await supabase.from("app_settings").select("key, value").in("key", allKeys);
+    const settingsMap = new Map((data ?? []).map((s: any) => [s.key, s.value]));
+
+    setWalletRules(
+      RULE_DEFINITIONS.map((def) => ({
+        ...def,
+        enabled: settingsMap.get(def.enabledKey) === "true",
+        amount: settingsMap.get(def.amountKey) ?? (def.key === "min_order_wallet" ? "100" : "0"),
+      }))
+    );
   };
 
-  const saveGlobalRule = async () => {
-    setGlobalRuleLoading(true);
-    // Upsert the app_settings row
-    const { data: existing } = await supabase
-      .from("app_settings")
-      .select("id")
-      .eq("key", "wallet_min_usage_amount")
-      .maybeSingle();
+  const saveWalletRules = async () => {
+    setRulesSaving(true);
+    try {
+      for (const rule of walletRules) {
+        // Upsert enabled flag
+        const { data: existingEnabled } = await supabase
+          .from("app_settings")
+          .select("id")
+          .eq("key", rule.enabledKey)
+          .maybeSingle();
+        if (existingEnabled) {
+          await supabase.from("app_settings").update({ value: String(rule.enabled), updated_by: user?.id } as any).eq("id", existingEnabled.id);
+        } else {
+          await supabase.from("app_settings").insert({ key: rule.enabledKey, value: String(rule.enabled), description: `${rule.label} - enabled`, updated_by: user?.id } as any);
+        }
 
-    if (existing) {
-      await supabase.from("app_settings").update({ value: globalMinUsage, updated_by: user?.id } as any).eq("id", existing.id);
-    } else {
-      await supabase.from("app_settings").insert({ key: "wallet_min_usage_amount", value: globalMinUsage, description: "Minimum order amount for customer wallet usage", updated_by: user?.id } as any);
+        // Upsert amount
+        const { data: existingAmount } = await supabase
+          .from("app_settings")
+          .select("id")
+          .eq("key", rule.amountKey)
+          .maybeSingle();
+        if (existingAmount) {
+          await supabase.from("app_settings").update({ value: rule.amount, updated_by: user?.id } as any).eq("id", existingAmount.id);
+        } else {
+          await supabase.from("app_settings").insert({ key: rule.amountKey, value: rule.amount, description: `${rule.label} - amount`, updated_by: user?.id } as any);
+        }
+      }
+
+      // If min_order_wallet rule changed, also update all customer wallets
+      const minOrderRule = walletRules.find((r) => r.key === "min_order_wallet");
+      if (minOrderRule) {
+        await supabase.from("customer_wallets").update({ min_usage_amount: Number(minOrderRule.amount) } as any).neq("id", "00000000-0000-0000-0000-000000000000");
+      }
+
+      toast({ title: "Wallet rules saved successfully" });
+    } catch (e: any) {
+      toast({ title: "Error saving rules", description: e.message, variant: "destructive" });
     }
+    setRulesSaving(false);
+  };
 
-    // Also update all customer wallets with this value
-    await supabase.from("customer_wallets").update({ min_usage_amount: Number(globalMinUsage) } as any).neq("id", "00000000-0000-0000-0000-000000000000");
-
-    toast({ title: "Global wallet rule saved & applied to all customers" });
-    setGlobalRuleLoading(false);
-    fetchAll();
+  const updateRule = (key: string, field: "enabled" | "amount", value: any) => {
+    setWalletRules((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, [field]: value } : r))
+    );
   };
 
   const fetchAll = async () => {
     setLoading(true);
-    await Promise.all([fetchCustomerWallets(), fetchSellerWallets(), fetchDeliveryWallets(), fetchGlobalRule()]);
+    await Promise.all([fetchCustomerWallets(), fetchSellerWallets(), fetchDeliveryWallets(), fetchWalletRules()]);
     setLoading(false);
   };
 
@@ -267,33 +344,12 @@ const WalletManagementPage = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2"><Wallet className="h-6 w-6" /> Wallet Management</h1>
-            <p className="text-muted-foreground text-sm">Manage all wallets from a single place</p>
+            <p className="text-muted-foreground text-sm">Manage wallets, rules & rewards</p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
-
-        {/* Global Wallet Rule */}
-        <Card className="border-primary/30 bg-primary/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Settings className="h-4 w-4" /> Common Customer Wallet Rule</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">
-              Set a global minimum order amount required for customers to use their wallet balance during checkout. This rule applies to all customer wallets.
-            </p>
-            <div className="flex items-end gap-3">
-              <div className="flex-1 max-w-xs">
-                <Label className="text-xs">Minimum Order Amount (₹)</Label>
-                <Input type="number" min="0" value={globalMinUsage} onChange={(e) => setGlobalMinUsage(e.target.value)} placeholder="100" />
-              </div>
-              <Button onClick={saveGlobalRule} disabled={globalRuleLoading} size="sm">
-                {globalRuleLoading ? "Saving..." : "Save & Apply to All"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -313,10 +369,73 @@ const WalletManagementPage = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
+            <TabsTrigger value="rules">
+              <Settings className="h-3.5 w-3.5 mr-1" /> Reward Rules
+            </TabsTrigger>
             <TabsTrigger value="customer">Customers</TabsTrigger>
             <TabsTrigger value="seller">Sellers</TabsTrigger>
             <TabsTrigger value="delivery">Delivery Staff</TabsTrigger>
           </TabsList>
+
+          {/* Wallet Reward Rules Tab */}
+          <TabsContent value="rules">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Gift className="h-5 w-5" /> Wallet Reward Rules
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Configure automatic wallet rewards and usage rules. Enable/disable each rule and set the reward amount (₹).
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {walletRules.map((rule) => (
+                  <div
+                    key={rule.key}
+                    className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border transition-colors ${
+                      rule.enabled ? "border-primary/40 bg-primary/5" : "border-border bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="mt-0.5">{rule.icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{rule.label}</span>
+                          <Badge variant={rule.enabled ? "default" : "secondary"} className="text-[10px]">
+                            {rule.enabled ? "Active" : "Off"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{rule.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 sm:gap-4 ml-8 sm:ml-0">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs whitespace-nowrap">Amount (₹)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          className="w-24 h-8 text-sm"
+                          value={rule.amount}
+                          onChange={(e) => updateRule(rule.key, "amount", e.target.value)}
+                        />
+                      </div>
+                      <Switch
+                        checked={rule.enabled}
+                        onCheckedChange={(v) => updateRule(rule.key, "enabled", v)}
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex justify-end pt-2">
+                  <Button onClick={saveWalletRules} disabled={rulesSaving}>
+                    {rulesSaving ? "Saving..." : "Save All Rules"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="customer">
             <Card>
               <CardHeader>
