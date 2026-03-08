@@ -1,12 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { format, subDays, subMonths, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, CalendarIcon, Filter } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend
@@ -62,6 +68,61 @@ const ReportsPage = () => {
   const [localBodies, setLocalBodies] = useState<LocalBody[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ─── Filters ───────────────────────────────────────────────────────────────
+  const [dateRange, setDateRange] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+
+  // Compute available categories
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    products.forEach(p => { if (p.category) cats.add(p.category); });
+    return Array.from(cats).sort();
+  }, [products]);
+
+  // Apply date preset
+  const handleDatePreset = (preset: string) => {
+    setDateRange(preset);
+    const now = new Date();
+    switch (preset) {
+      case "7d": setDateFrom(subDays(now, 7)); setDateTo(now); break;
+      case "30d": setDateFrom(subDays(now, 30)); setDateTo(now); break;
+      case "90d": setDateFrom(subDays(now, 90)); setDateTo(now); break;
+      case "6m": setDateFrom(subMonths(now, 6)); setDateTo(now); break;
+      case "1y": setDateFrom(subMonths(now, 12)); setDateTo(now); break;
+      case "custom": break;
+      default: setDateFrom(undefined); setDateTo(undefined); break;
+    }
+  };
+
+  // Build product maps early for category filter
+  const productMapEarly: Record<string, Product> = {};
+  products.forEach(p => { productMapEarly[p.id] = p; });
+  const sellerProdMapEarly: Record<string, SellerProduct & { category?: string | null }> = {};
+  sellerProducts.forEach(sp => { sellerProdMapEarly[sp.id] = sp as any; });
+
+  // Filter orders by date range, status, and category
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (dateFrom && dateTo) {
+        const d = new Date(o.created_at);
+        if (!isWithinInterval(d, { start: startOfDay(dateFrom), end: endOfDay(dateTo) })) return false;
+      }
+      if (filterStatus !== "all" && o.status !== filterStatus) return false;
+      if (filterCategory !== "all") {
+        const items = Array.isArray(o.items) ? o.items : [];
+        const hasCategory = items.some((item: any) => {
+          const cat = productMapEarly[item.id]?.category || (sellerProdMapEarly[item.id] as any)?.category;
+          return cat === filterCategory;
+        });
+        if (!hasCategory) return false;
+      }
+      return true;
+    });
+  }, [orders, dateFrom, dateTo, filterStatus, filterCategory, productMapEarly, sellerProdMapEarly]);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -91,10 +152,10 @@ const ReportsPage = () => {
     load();
   }, []);
 
-  // ─── Derived Data ─────────────────────────────────────────────────────────
-  const delivered = orders.filter(o => o.status === "delivered");
-  const cancelled = orders.filter(o => o.status === "cancelled");
-  const pending = orders.filter(o => !["delivered", "cancelled"].includes(o.status));
+  // ─── Derived Data (uses filteredOrders) ────────────────────────────────────
+  const delivered = filteredOrders.filter(o => o.status === "delivered");
+  const cancelled = filteredOrders.filter(o => o.status === "cancelled");
+  const pending = filteredOrders.filter(o => !["delivered", "cancelled"].includes(o.status));
 
   // P&L: revenue = sum of order totals (delivered); COGS = sum of (purchase_rate × qty) for all items
   let grossRevenue = 0, cogs = 0;
@@ -224,7 +285,101 @@ const ReportsPage = () => {
 
   return (
     <AdminLayout>
-      <h1 className="mb-6 text-2xl font-bold">Reports & Analytics</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold">Reports & Analytics</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Date Range Preset */}
+          <Select value={dateRange} onValueChange={handleDatePreset}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue placeholder="Date Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+              <SelectItem value="30d">Last 30 Days</SelectItem>
+              <SelectItem value="90d">Last 90 Days</SelectItem>
+              <SelectItem value="6m">Last 6 Months</SelectItem>
+              <SelectItem value="1y">Last 1 Year</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Custom Date Pickers */}
+          {dateRange === "custom" && (
+            <>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className={cn("text-xs gap-1", !dateFrom && "text-muted-foreground")}>
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    {dateFrom ? format(dateFrom, "dd MMM yy") : "From"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dateFrom} onSelect={setDateFrom} initialFocus className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className={cn("text-xs gap-1", !dateTo && "text-muted-foreground")}>
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    {dateTo ? format(dateTo, "dd MMM yy") : "To"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dateTo} onSelect={setDateTo} initialFocus className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </>
+          )}
+
+          {/* Status Filter */}
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[120px] h-9 text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="delivered">Delivered</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Category Filter */}
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Reset */}
+          {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all") && (
+            <Button variant="ghost" size="sm" className="text-xs h-9" onClick={() => { setDateRange("all"); setDateFrom(undefined); setDateTo(undefined); setFilterStatus("all"); setFilterCategory("all"); }}>
+              Reset
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Active filters summary */}
+      {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all") && (
+        <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+          <Filter className="h-3.5 w-3.5" />
+          <span>
+            Showing {filteredOrders.length} of {orders.length} orders
+            {dateFrom && dateTo && ` • ${format(dateFrom, "dd MMM yy")} – ${format(dateTo, "dd MMM yy")}`}
+            {filterStatus !== "all" && ` • Status: ${filterStatus}`}
+            {filterCategory !== "all" && ` • Category: ${filterCategory}`}
+          </span>
+        </div>
+      )}
 
       <Tabs defaultValue="overview">
         <TabsList className="mb-6 flex flex-wrap gap-1 h-auto">
@@ -240,10 +395,10 @@ const ReportsPage = () => {
         {/* ── OVERVIEW ── */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Orders" value={String(orders.length)} icon={ShoppingCart} sub={`${delivered.length} delivered`} />
+            <StatCard label="Total Orders" value={String(filteredOrders.length)} icon={ShoppingCart} sub={`${delivered.length} delivered`} />
             <StatCard label="Gross Revenue" value={fmt(grossRevenue)} icon={TrendingUp} sub={`from ${delivered.length} deliveries`} color="text-green-600" />
             <StatCard label="Gross Profit" value={fmt(grossProfit)} icon={BarChart3} sub={`${grossMargin.toFixed(1)}% margin`} color={grossProfit >= 0 ? "text-green-600" : "text-destructive"} />
-            <StatCard label="Cancellations" value={String(cancelled.length)} icon={TrendingDown} sub={pct(cancelled.length, orders.length) + " of orders"} color="text-destructive" />
+            <StatCard label="Cancellations" value={String(cancelled.length)} icon={TrendingDown} sub={pct(cancelled.length, filteredOrders.length) + " of orders"} color="text-destructive" />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
