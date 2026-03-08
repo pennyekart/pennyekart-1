@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -9,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Truck, Phone, Mail, MapPin, Settings2, Wallet } from "lucide-react";
+import { Search, Truck, Phone, Mail, MapPin, Settings2, Wallet, ChevronDown, User } from "lucide-react";
 
 interface DeliveryStaff {
   id: string;
@@ -45,6 +45,8 @@ const DeliveryManagementPage = () => {
   const [selectedLB, setSelectedLB] = useState("");
   const [selectedWards, setSelectedWards] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
   // Settle dialog
   const [settleDialogOpen, setSettleDialogOpen] = useState(false);
   const [settleStaff, setSettleStaff] = useState<DeliveryStaff | null>(null);
@@ -147,15 +149,12 @@ const DeliveryManagementPage = () => {
   const saveWardAssignments = async () => {
     if (!selectedStaff || !selectedLB) return;
     setSaving(true);
-
-    // Delete existing assignments for this staff + local body
     await supabase
       .from("delivery_staff_ward_assignments")
       .delete()
       .eq("staff_user_id", selectedStaff.user_id)
       .eq("local_body_id", selectedLB);
 
-    // Insert new assignments
     if (selectedWards.length > 0) {
       const rows = selectedWards.map((w) => ({
         staff_user_id: selectedStaff.user_id,
@@ -199,7 +198,6 @@ const DeliveryManagementPage = () => {
     }
     setSettling(true);
 
-    // Get or create wallet
     let { data: wallet } = await supabase.from("delivery_staff_wallets").select("id, balance, earning_balance").eq("staff_user_id", settleStaff.user_id).maybeSingle();
     if (!wallet) {
       const { data: newW } = await supabase.from("delivery_staff_wallets").insert({ staff_user_id: settleStaff.user_id }).select("id, balance, earning_balance").single();
@@ -212,7 +210,6 @@ const DeliveryManagementPage = () => {
       ? settleNote || "Earning payment by office"
       : settleNote || "Collection settlement by admin";
 
-    // Insert settlement transaction
     const { error: txErr } = await supabase.from("delivery_staff_wallet_transactions").insert({
       staff_user_id: settleStaff.user_id,
       wallet_id: (wallet as any).id,
@@ -226,7 +223,6 @@ const DeliveryManagementPage = () => {
       return;
     }
 
-    // Update wallet balance
     const updatePayload = isEarningSettle
       ? { earning_balance: (wallet as any).earning_balance - amt }
       : { balance: (wallet as any).balance - amt };
@@ -253,9 +249,29 @@ const DeliveryManagementPage = () => {
     );
   });
 
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const approvedCount = staff.filter((s) => s.is_approved).length;
   const pendingCount = staff.filter((s) => !s.is_approved).length;
   const selectedLBData = localBodies.find((l) => l.id === selectedLB);
+
+  const getWardSummary = (s: DeliveryStaff) => {
+    const wards = s.assigned_wards ?? [];
+    if (wards.length === 0) return null;
+    const grouped: Record<string, number[]> = {};
+    wards.forEach((w) => {
+      if (!grouped[w.local_body_name]) grouped[w.local_body_name] = [];
+      grouped[w.local_body_name].push(w.ward_number);
+    });
+    return grouped;
+  };
 
   return (
     <AdminLayout>
@@ -280,105 +296,142 @@ const DeliveryManagementPage = () => {
           <Input placeholder="Search by name, email, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
 
-        <div className="admin-table-wrap">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Assigned Wards</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Approved</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-              ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No delivery staff found</TableCell></TableRow>
-              ) : (
-                filtered.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.full_name ?? "—"}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {s.email && <div className="flex items-center gap-1.5 text-sm"><Mail className="h-3.5 w-3.5 text-muted-foreground" />{s.email}</div>}
-                        {s.mobile_number && <div className="flex items-center gap-1.5 text-sm"><Phone className="h-3.5 w-3.5 text-muted-foreground" />{s.mobile_number}</div>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {s.district_name || s.local_body_name ? (
-                        <div className="flex items-center gap-1.5 text-sm">
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span>
-                            {s.local_body_name && <span>{s.local_body_name}</span>}
-                            {s.district_name && <span className="text-muted-foreground">, {s.district_name}</span>}
-                          </span>
+        {loading ? (
+          <div className="text-center py-12 text-muted-foreground">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">No delivery staff found</div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((s) => {
+              const isOpen = expandedIds.has(s.id);
+              const wardGroups = getWardSummary(s);
+
+              return (
+                <Collapsible key={s.id} open={isOpen} onOpenChange={() => toggleExpanded(s.id)}>
+                  <div className="rounded-lg border bg-card">
+                    {/* Collapsed header */}
+                    <CollapsibleTrigger asChild>
+                      <button className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/50 transition-colors rounded-lg">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <User className="h-5 w-5 text-primary" />
                         </div>
-                      ) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {(s.assigned_wards ?? []).length > 0 ? (() => {
-                        const grouped: Record<string, number[]> = {};
-                        s.assigned_wards!.forEach((w) => {
-                          if (!grouped[w.local_body_name]) grouped[w.local_body_name] = [];
-                          grouped[w.local_body_name].push(w.ward_number);
-                        });
-                        return (
-                          <div className="space-y-0.5">
-                            {Object.entries(grouped).map(([name, wards]) => (
-                              <div key={name} className="text-sm">
-                                <span className="font-medium">{name}</span>
-                                <span className="text-muted-foreground ml-1">
-                                  W{wards.sort((a, b) => a - b).join(", W")}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold truncate">{s.full_name ?? "—"}</span>
+                            <Badge variant={s.is_approved ? "default" : "secondary"} className="text-xs">
+                              {s.is_approved ? "Active" : "Pending"}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {s.delivery_type === "part_time" ? "Part-time" : "Fixed"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-sm text-muted-foreground">
+                            {s.mobile_number && <span>{s.mobile_number}</span>}
+                            {s.local_body_name && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {s.local_body_name}
+                              </span>
+                            )}
+                            {wardGroups && (
+                              <span className="text-xs">
+                                {Object.values(wardGroups).flat().length} ward(s)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronDown className={`h-5 w-5 text-muted-foreground shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+                      </button>
+                    </CollapsibleTrigger>
+
+                    {/* Expanded content */}
+                    <CollapsibleContent>
+                      <div className="px-4 pb-4 pt-0 space-y-4 border-t">
+                        {/* Contact & Location */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact</h4>
+                            {s.email && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                                {s.email}
+                              </div>
+                            )}
+                            {s.mobile_number && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                                {s.mobile_number}
+                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Location</h4>
+                            {s.local_body_name || s.district_name ? (
+                              <div className="flex items-center gap-2 text-sm">
+                                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>
+                                  {s.local_body_name}{s.district_name && <span className="text-muted-foreground">, {s.district_name}</span>}
                                 </span>
                               </div>
-                            ))}
+                            ) : (
+                              <span className="text-sm text-muted-foreground">Not set</span>
+                            )}
                           </div>
-                        );
-                      })() : <span className="text-sm text-muted-foreground">None</span>}
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        onClick={() => toggleDeliveryType(s.user_id, s.delivery_type ?? "fixed")}
-                        className="focus:outline-none"
-                        title="Click to toggle type"
-                      >
-                        <Badge variant={s.delivery_type === "part_time" ? "default" : "secondary"} className="cursor-pointer hover:opacity-80 transition-opacity">
-                          {s.delivery_type === "part_time" ? "Part-time" : "Fixed"}
-                        </Badge>
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={s.is_approved ? "default" : "secondary"}>
-                        {s.is_approved ? "Active" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Switch checked={s.is_approved} onCheckedChange={() => toggleApproval(s.user_id, s.is_approved)} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1.5">
-                        <Button variant="outline" size="sm" onClick={() => openWardDialog(s)}>
-                          <Settings2 className="h-4 w-4 mr-1" /> Wards
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => openSettleDialog(s)}>
-                          <Wallet className="h-4 w-4 mr-1" /> Settle
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                        </div>
 
+                        {/* Assigned Wards */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assigned Wards</h4>
+                          {wardGroups ? (
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(wardGroups).map(([name, wards]) => (
+                                <div key={name} className="rounded-md border bg-muted/50 px-3 py-1.5 text-sm">
+                                  <span className="font-medium">{name}</span>
+                                  <span className="text-muted-foreground ml-1.5">
+                                    W{wards.sort((a, b) => a - b).join(", W")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">No wards assigned</span>
+                          )}
+                        </div>
+
+                        {/* Controls */}
+                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Approved</span>
+                            <Switch checked={s.is_approved} onCheckedChange={() => toggleApproval(s.user_id, s.is_approved)} />
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleDeliveryType(s.user_id, s.delivery_type ?? "fixed"); }}
+                            className="focus:outline-none"
+                          >
+                            <Badge variant={s.delivery_type === "part_time" ? "default" : "secondary"} className="cursor-pointer hover:opacity-80 transition-opacity">
+                              {s.delivery_type === "part_time" ? "Part-time" : "Fixed"} — Click to toggle
+                            </Badge>
+                          </button>
+                          <div className="flex gap-2 ml-auto">
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openWardDialog(s); }}>
+                              <Settings2 className="h-4 w-4 mr-1" /> Wards
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openSettleDialog(s); }}>
+                              <Wallet className="h-4 w-4 mr-1" /> Settle
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </div>
+                </Collapsible>
+              );
+            })}
+          </div>
+        )}
       </div>
 
+      {/* Ward Assignment Dialog */}
       <Dialog open={wardDialogOpen} onOpenChange={setWardDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -419,13 +472,13 @@ const DeliveryManagementPage = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Settlement Dialog */}
       <Dialog open={settleDialogOpen} onOpenChange={setSettleDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Settlement — {settleStaff?.full_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Settlement type selector — only for part-time */}
             {settleStaff?.delivery_type === "part_time" && (
               <div className="flex rounded-lg border overflow-hidden">
                 <button
@@ -443,7 +496,6 @@ const DeliveryManagementPage = () => {
               </div>
             )}
 
-            {/* Balance info */}
             <div className="rounded-lg border p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Collection Balance</span>
