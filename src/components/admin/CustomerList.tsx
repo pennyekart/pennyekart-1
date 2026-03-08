@@ -161,6 +161,44 @@ const CustomerList = ({ customers, orderSummaries, walletSummaries }: CustomerLi
     return { totalOrders, totalRevenue, activeCustomers, totalWalletBalance };
   }, [filtered, orderSummaries, walletSummaries]);
 
+  // Recent activity stats
+  const recentActivity = useMemo(() => {
+    const now = new Date();
+    let today = 0, last7 = 0, last30 = 0;
+    const recentCustomers: { name: string; ago: string; amount: number }[] = [];
+
+    customers.forEach((c) => {
+      const o = orderSummaries?.get(c.user_id);
+      if (!o?.last_order_date) return;
+      const lastDate = new Date(o.last_order_date);
+      const days = differenceInDays(now, lastDate);
+      if (days === 0) today++;
+      if (days <= 7) last7++;
+      if (days <= 30) last30++;
+    });
+
+    // Get 5 most recent customers
+    const sortedByRecent = [...customers]
+      .filter((c) => orderSummaries?.get(c.user_id)?.last_order_date)
+      .sort((a, b) => {
+        const dA = orderSummaries?.get(a.user_id)?.last_order_date ?? "";
+        const dB = orderSummaries?.get(b.user_id)?.last_order_date ?? "";
+        return dB.localeCompare(dA);
+      })
+      .slice(0, 5);
+
+    sortedByRecent.forEach((c) => {
+      const o = orderSummaries?.get(c.user_id)!;
+      recentCustomers.push({
+        name: c.full_name ?? "Unknown",
+        ago: formatDistanceToNow(new Date(o.last_order_date!), { addSuffix: true }),
+        amount: o.total_spent,
+      });
+    });
+
+    return { today, last7, last30, recentCustomers };
+  }, [customers, orderSummaries]);
+
   const topPanchayaths = useMemo(() => {
     return Array.from(panchayathStats.entries())
       .filter(([key]) => key !== "__none")
@@ -169,6 +207,18 @@ const CustomerList = ({ customers, orderSummaries, walletSummaries }: CustomerLi
   }, [panchayathStats]);
 
   const fmt = (n: number) => n >= 1000 ? `₹${(n / 1000).toFixed(1)}K` : `₹${n.toFixed(0)}`;
+
+  const getRelativeTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const hours = differenceInHours(new Date(), date);
+    if (hours < 1) return "Just now";
+    if (hours < 24) return `${hours}h ago`;
+    const days = differenceInDays(new Date(), date);
+    if (days < 7) return `${days}d ago`;
+    if (days < 30) return `${Math.floor(days / 7)}w ago`;
+    return format(date, "dd MMM");
+  };
 
   const getStatusBadge = (c: Profile) => {
     const status = classifyCustomer(c);
