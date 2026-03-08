@@ -395,10 +395,10 @@ const ReportsPage = () => {
         {/* ── OVERVIEW ── */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Orders" value={String(orders.length)} icon={ShoppingCart} sub={`${delivered.length} delivered`} />
+            <StatCard label="Total Orders" value={String(filteredOrders.length)} icon={ShoppingCart} sub={`${delivered.length} delivered`} />
             <StatCard label="Gross Revenue" value={fmt(grossRevenue)} icon={TrendingUp} sub={`from ${delivered.length} deliveries`} color="text-green-600" />
             <StatCard label="Gross Profit" value={fmt(grossProfit)} icon={BarChart3} sub={`${grossMargin.toFixed(1)}% margin`} color={grossProfit >= 0 ? "text-green-600" : "text-destructive"} />
-            <StatCard label="Cancellations" value={String(cancelled.length)} icon={TrendingDown} sub={pct(cancelled.length, orders.length) + " of orders"} color="text-destructive" />
+            <StatCard label="Cancellations" value={String(cancelled.length)} icon={TrendingDown} sub={pct(cancelled.length, filteredOrders.length) + " of orders"} color="text-destructive" />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
