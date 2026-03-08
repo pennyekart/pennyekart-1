@@ -108,7 +108,14 @@ const ReportsPage = () => {
   const sellerProdMapEarly: Record<string, SellerProduct & { category?: string | null }> = {};
   sellerProducts.forEach(sp => { sellerProdMapEarly[sp.id] = sp as any; });
 
-  // Compute local body IDs for selected district
+  // Profile lookup for location filtering
+  const profileMap = useMemo(() => {
+    const m: Record<string, Profile> = {};
+    profiles.forEach(p => { m[p.user_id] = p; });
+    return m;
+  }, [profiles]);
+
+
   const localBodyIdsForDistrict = useMemo(() => {
     if (filterDistrict === "all") return null;
     return new Set(localBodies.filter(lb => lb.district_id === filterDistrict).map(lb => lb.id));
