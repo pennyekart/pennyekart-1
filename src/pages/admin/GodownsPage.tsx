@@ -146,8 +146,13 @@ const GodownsPage = () => {
     if (data) setGodowns(data as Godown[]);
   };
 
+  const fetchDistricts = async () => {
+    const { data } = await supabase.from("locations_districts").select("id, name").eq("is_active", true).order("name");
+    if (data) setDistricts(data as District[]);
+  };
+
   const fetchLocalBodies = async () => {
-    const { data } = await supabase.from("locations_local_bodies").select("id, name, body_type, ward_count").eq("is_active", true);
+    const { data } = await supabase.from("locations_local_bodies").select("id, name, body_type, ward_count, district_id").eq("is_active", true);
     if (data) setLocalBodies(data as LocalBody[]);
   };
 
