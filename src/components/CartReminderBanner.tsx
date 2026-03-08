@@ -11,7 +11,7 @@ const CartReminderBanner = () => {
   if (totalItems === 0 || dismissed) return null;
 
   return (
-    <div className="mx-3 my-2 rounded-xl bg-primary/10 border border-primary/20 p-3 flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+    <div className="sticky top-0 z-40 mx-3 mt-2 mb-1 rounded-xl bg-primary/10 border border-primary/20 p-3 flex items-center gap-3 animate-in slide-in-from-top-2 duration-300 backdrop-blur-sm">
       <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
         <ShoppingCart className="w-5 h-5 text-primary" />
       </div>
