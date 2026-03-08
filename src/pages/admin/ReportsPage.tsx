@@ -97,7 +97,13 @@ const ReportsPage = () => {
     }
   };
 
-  // Filter orders by date range and status
+  // Build product maps early for category filter
+  const productMapEarly: Record<string, Product> = {};
+  products.forEach(p => { productMapEarly[p.id] = p; });
+  const sellerProdMapEarly: Record<string, SellerProduct & { category?: string | null }> = {};
+  sellerProducts.forEach(sp => { sellerProdMapEarly[sp.id] = sp as any; });
+
+  // Filter orders by date range, status, and category
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       if (dateFrom && dateTo) {
@@ -105,9 +111,17 @@ const ReportsPage = () => {
         if (!isWithinInterval(d, { start: startOfDay(dateFrom), end: endOfDay(dateTo) })) return false;
       }
       if (filterStatus !== "all" && o.status !== filterStatus) return false;
+      if (filterCategory !== "all") {
+        const items = Array.isArray(o.items) ? o.items : [];
+        const hasCategory = items.some((item: any) => {
+          const cat = productMapEarly[item.id]?.category || (sellerProdMapEarly[item.id] as any)?.category;
+          return cat === filterCategory;
+        });
+        if (!hasCategory) return false;
+      }
       return true;
     });
-  }, [orders, dateFrom, dateTo, filterStatus]);
+  }, [orders, dateFrom, dateTo, filterStatus, filterCategory, productMapEarly, sellerProdMapEarly]);
 
   useEffect(() => {
     const load = async () => {
