@@ -56,7 +56,7 @@ const Index = () => {
   const isCustomer = user && profile?.user_type === "customer";
 
   // Helper to convert products to row format
-  const toRowFormat = (items: { id?: string; name: string; price: number; mrp: number; image_url: string | null; coming_soon?: boolean; wallet_points?: number }[]) =>
+  const toRowFormat = (items: { id?: string; name: string; price: number; mrp: number; image_url: string | null; coming_soon?: boolean; wallet_points?: number; section?: string | null }[]) =>
     items.map(p => ({
       id: (p as any).id,
       name: p.name,
@@ -67,6 +67,34 @@ const Index = () => {
       coming_soon: p.coming_soon,
       wallet_points: p.wallet_points,
     }));
+
+  // Sort products based on selected sort option
+  const applySorting = <T extends { price: number; mrp: number; coming_soon?: boolean; section?: string | null }>(items: T[]): T[] => {
+    if (sortBy === "relevance") return items;
+    return [...items].sort((a, b) => {
+      // Always keep coming_soon at the end
+      if (a.coming_soon && !b.coming_soon) return 1;
+      if (!a.coming_soon && b.coming_soon) return -1;
+
+      switch (sortBy) {
+        case "price_low":
+          return a.price - b.price;
+        case "price_high":
+          return b.price - a.price;
+        case "rating":
+          return 0; // Static rating for now
+        case "discount": {
+          const discA = a.mrp > a.price ? ((a.mrp - a.price) / a.mrp) * 100 : 0;
+          const discB = b.mrp > b.price ? ((b.mrp - b.price) / b.mrp) * 100 : 0;
+          return discB - discA;
+        }
+        case "most_ordered":
+          return a.section === "most_ordered" ? -1 : b.section === "most_ordered" ? 1 : 0;
+        default:
+          return 0;
+      }
+    });
+  };
 
   // Group area products by category
   const groupedByCategory = areaProducts.reduce<Record<string, typeof areaProducts>>((acc, p) => {
