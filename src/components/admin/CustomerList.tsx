@@ -368,6 +368,7 @@ const CustomerList = ({ customers, orderSummaries, walletSummaries }: CustomerLi
             )}
           </CardContent>
         </Card>
+      </div>
 
       {/* Activity Status Tabs */}
       <Card>
