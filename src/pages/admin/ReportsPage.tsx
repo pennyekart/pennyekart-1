@@ -405,9 +405,52 @@ const ReportsPage = () => {
             </SelectContent>
           </Select>
 
+          {/* District Filter */}
+          <Select value={filterDistrict} onValueChange={(v) => { setFilterDistrict(v); setFilterLocalBody("all"); setFilterWard("all"); }}>
+            <SelectTrigger className="w-[130px] h-9 text-xs">
+              <SelectValue placeholder="District" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Districts</SelectItem>
+              {districts.map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Panchayath Filter */}
+          {filterDistrict !== "all" && (
+            <Select value={filterLocalBody} onValueChange={(v) => { setFilterLocalBody(v); setFilterWard("all"); }}>
+              <SelectTrigger className="w-[140px] h-9 text-xs">
+                <SelectValue placeholder="Panchayath" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Panchayaths</SelectItem>
+                {filteredLocalBodies.map(lb => (
+                  <SelectItem key={lb.id} value={lb.id}>{lb.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Ward Filter */}
+          {filterLocalBody !== "all" && wardOptions.length > 0 && (
+            <Select value={filterWard} onValueChange={setFilterWard}>
+              <SelectTrigger className="w-[110px] h-9 text-xs">
+                <SelectValue placeholder="Ward" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Wards</SelectItem>
+                {wardOptions.map(w => (
+                  <SelectItem key={w} value={String(w)}>Ward {w}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* Reset */}
-          {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all") && (
-            <Button variant="ghost" size="sm" className="text-xs h-9" onClick={() => { setDateRange("all"); setDateFrom(undefined); setDateTo(undefined); setFilterStatus("all"); setFilterCategory("all"); }}>
+          {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all" || filterDistrict !== "all") && (
+            <Button variant="ghost" size="sm" className="text-xs h-9" onClick={() => { setDateRange("all"); setDateFrom(undefined); setDateTo(undefined); setFilterStatus("all"); setFilterCategory("all"); setFilterDistrict("all"); setFilterLocalBody("all"); setFilterWard("all"); }}>
               Reset
             </Button>
           )}
@@ -415,7 +458,7 @@ const ReportsPage = () => {
       </div>
 
       {/* Active filters summary */}
-      {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all") && (
+      {(dateRange !== "all" || filterStatus !== "all" || filterCategory !== "all" || filterDistrict !== "all") && (
         <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
           <Filter className="h-3.5 w-3.5" />
           <span>
@@ -423,6 +466,9 @@ const ReportsPage = () => {
             {dateFrom && dateTo && ` • ${format(dateFrom, "dd MMM yy")} – ${format(dateTo, "dd MMM yy")}`}
             {filterStatus !== "all" && ` • Status: ${filterStatus}`}
             {filterCategory !== "all" && ` • Category: ${filterCategory}`}
+            {filterDistrict !== "all" && ` • District: ${districts.find(d => d.id === filterDistrict)?.name}`}
+            {filterLocalBody !== "all" && ` • ${localBodies.find(lb => lb.id === filterLocalBody)?.name}`}
+            {filterWard !== "all" && ` • Ward ${filterWard}`}
           </span>
         </div>
       )}
