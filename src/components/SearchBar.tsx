@@ -1,22 +1,85 @@
-import { Search, User, Wallet, ShoppingCart, LogOut, Package, MapPin, Heart, Bell, ChevronDown, Tag, Download } from "lucide-react";
+import { Search, User, Wallet, ShoppingCart, LogOut, Package, MapPin, Heart, Bell, ChevronDown, Tag, Download, X } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import DownloadAppDialog from "@/components/DownloadAppDialog";
+
+interface SearchResult {
+  id: string;
+  name: string;
+  price: number;
+  mrp: number;
+  image_url: string | null;
+  source: 'product' | 'seller';
+}
 
 const SearchBar = () => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const displayName = profile?.full_name || profile?.email || user?.email;
   const isLoggedIn = !!user;
+
+  // Search logic
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setResults([]);
+      setShowResults(false);
+      return;
+    }
+    setSearching(true);
+    setShowResults(true);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const searchTerm = `%${query.trim()}%`;
+      const [productsRes, sellerRes] = await Promise.all([
+        supabase
+          .from('products')
+          .select('id, name, price, mrp, image_url')
+          .eq('is_active', true)
+          .ilike('name', searchTerm)
+          .limit(8),
+        supabase
+          .from('seller_products')
+          .select('id, name, price, mrp, image_url')
+          .eq('is_active', true)
+          .eq('is_approved', true)
+          .ilike('name', searchTerm)
+          .limit(8),
+      ]);
+      const items: SearchResult[] = [
+        ...(productsRes.data || []).map(p => ({ ...p, source: 'product' as const })),
+        ...(sellerRes.data || []).map(p => ({ ...p, source: 'seller' as const })),
+      ];
+      setResults(items.slice(0, 10));
+      setSearching(false);
+    }, 300);
+  }, [query]);
+
+  // Close search results on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowResults(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const updatePosition = useCallback(() => {
     const isMobile = window.innerWidth < 640;
@@ -106,13 +169,62 @@ const SearchBar = () => {
     <div className="border-b bg-card">
       <div className="container flex items-center gap-3 py-2.5">
         {/* Search */}
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={searchRef}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => query.trim().length >= 2 && setShowResults(true)}
             placeholder="Search for Products, Brands and More"
-            className="w-full rounded-lg border bg-muted/50 py-2.5 pl-10 pr-4 text-sm outline-none transition-colors focus:border-primary focus:bg-card"
+            className="w-full rounded-lg border bg-muted/50 py-2.5 pl-10 pr-9 text-sm outline-none transition-colors focus:border-primary focus:bg-card"
           />
+          {query && (
+            <button
+              onClick={() => { setQuery(""); setResults([]); setShowResults(false); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Search Results Dropdown */}
+          {showResults && (
+            <div className="absolute top-full left-0 right-0 mt-1 max-h-80 overflow-y-auto rounded-lg border bg-card shadow-lg z-50">
+              {searching ? (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">Searching...</div>
+              ) : results.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">No products found</div>
+              ) : (
+                results.map((item) => (
+                  <button
+                    key={`${item.source}-${item.id}`}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left border-b last:border-b-0"
+                    onClick={() => {
+                      navigate(`/product/${item.id}`);
+                      setShowResults(false);
+                      setQuery("");
+                    }}
+                  >
+                    <img
+                      src={item.image_url || "/placeholder.svg"}
+                      alt={item.name}
+                      className="w-10 h-10 rounded-md object-cover bg-muted flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground">₹{item.price}</span>
+                        {item.mrp > item.price && (
+                          <span className="text-xs text-muted-foreground line-through">₹{item.mrp}</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Actions - desktop */}
