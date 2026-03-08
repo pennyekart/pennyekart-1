@@ -428,6 +428,8 @@ const Cart = () => {
                 description: item.desc, order_id: firstOrderId,
               } as any);
             }
+            // Show reward popup
+            setWalletRewardPopup({ rewards: bonusItems, total: bonusTotal });
           }
         } catch (e) {
           console.error("Wallet bonus error:", e);
@@ -442,7 +444,7 @@ const Cart = () => {
           ? `${orderCount} orders placed successfully! Micro godown items ship directly. Seller items await seller confirmation.`
           : "Order placed successfully!"
       );
-      navigate("/");
+      if (!walletRewardPopup) navigate("/");
     } catch (err: any) {
       toast.error(err.message || "Failed to place order");
     } finally {
