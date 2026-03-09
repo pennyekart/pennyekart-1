@@ -11,13 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Percent } from "lucide-react";
 import ImageUpload from "@/components/admin/ImageUpload";
 
 interface Category {
   id: string; name: string; icon: string | null; item_count: string | null;
   sort_order: number; is_active: boolean; category_type: string; image_url: string | null;
-  variation_type: string | null;
+  variation_type: string | null; margin_percentage: number;
 }
 
 const VARIATION_TYPES = [
@@ -28,7 +28,7 @@ const VARIATION_TYPES = [
   { value: "measurement", label: "Measurement (cm / inches)" },
 ];
 
-const emptyCategory = { name: "", icon: "", item_count: "", sort_order: 0, is_active: true, category_type: "general", image_url: "", variation_type: "none" };
+const emptyCategory = { name: "", icon: "", item_count: "", sort_order: 0, is_active: true, category_type: "general", image_url: "", variation_type: "none", margin_percentage: 0 };
 
 const CategoriesPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -67,7 +67,12 @@ const CategoriesPage = () => {
   };
 
   const openEdit = (c: Category) => {
-    setForm({ name: c.name, icon: c.icon ?? "", item_count: c.item_count ?? "", sort_order: c.sort_order, is_active: c.is_active, category_type: c.category_type, image_url: c.image_url ?? "", variation_type: c.variation_type ?? "none" });
+    setForm({ 
+      name: c.name, icon: c.icon ?? "", item_count: c.item_count ?? "", 
+      sort_order: c.sort_order, is_active: c.is_active, category_type: c.category_type, 
+      image_url: c.image_url ?? "", variation_type: c.variation_type ?? "none",
+      margin_percentage: c.margin_percentage ?? 0
+    });
     setEditId(c.id); setOpen(true);
   };
 
@@ -89,6 +94,27 @@ const CategoriesPage = () => {
                 {tab === "general" && (
                   <div><Label>Item Count</Label><Input value={form.item_count} onChange={(e) => setForm({ ...form, item_count: e.target.value })} placeholder="e.g. 2,400+" /></div>
                 )}
+                
+                {/* Platform Margin */}
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <Label className="flex items-center gap-2 text-primary">
+                    <Percent className="h-4 w-4" />
+                    Platform Margin (%)
+                  </Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Default commission percentage for products in this category
+                  </p>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={form.margin_percentage} 
+                    onChange={(e) => setForm({ ...form, margin_percentage: +e.target.value })} 
+                    placeholder="e.g. 10"
+                  />
+                </div>
+
                 <div><Label>Sort Order</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: +e.target.value })} /></div>
                 <div>
                   <Label>Variation Type</Label>
@@ -122,6 +148,7 @@ const CategoriesPage = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Icon</TableHead>
                   {tab === "general" && <TableHead>Items</TableHead>}
+                  <TableHead>Margin %</TableHead>
                   <TableHead>Variation</TableHead>
                   <TableHead>Order</TableHead>
                   <TableHead>Active</TableHead>
@@ -134,6 +161,9 @@ const CategoriesPage = () => {
                     <TableCell className="font-medium">{c.name}</TableCell>
                     <TableCell>{c.icon}</TableCell>
                     {tab === "general" && <TableCell>{c.item_count}</TableCell>}
+                    <TableCell>
+                      <span className="font-medium text-primary">{c.margin_percentage ?? 0}%</span>
+                    </TableCell>
                     <TableCell className="text-xs">{VARIATION_TYPES.find(v => v.value === (c.variation_type || "none"))?.label || "—"}</TableCell>
                     <TableCell>{c.sort_order}</TableCell>
                     <TableCell>{c.is_active ? "✓" : "✗"}</TableCell>
@@ -146,7 +176,7 @@ const CategoriesPage = () => {
                   </TableRow>
                 ))}
                 {filtered.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No categories yet</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">No categories yet</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
