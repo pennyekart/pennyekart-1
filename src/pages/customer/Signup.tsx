@@ -24,6 +24,8 @@ const CUSTOMER_PASSWORD = "pennyekart_customer_2024";
 
 const CustomerSignup = () => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const referralCode = searchParams.get("ref") || "";
   const [fullName, setFullName] = useState("");
   const [mobile, setMobile] = useState((location.state as any)?.mobile || "");
   const [districtId, setDistrictId] = useState("");
