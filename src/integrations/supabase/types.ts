@@ -89,6 +89,7 @@ export type Database = {
           image_url: string | null
           is_active: boolean
           item_count: string | null
+          margin_percentage: number | null
           name: string
           sort_order: number
           updated_at: string
@@ -102,6 +103,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           item_count?: string | null
+          margin_percentage?: number | null
           name: string
           sort_order?: number
           updated_at?: string
@@ -115,6 +117,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean
           item_count?: string | null
+          margin_percentage?: number | null
           name?: string
           sort_order?: number
           updated_at?: string
@@ -938,6 +941,7 @@ export type Database = {
           image_url_2: string | null
           image_url_3: string | null
           is_active: boolean
+          margin_percentage: number | null
           mrp: number
           name: string
           price: number
@@ -963,6 +967,7 @@ export type Database = {
           image_url_2?: string | null
           image_url_3?: string | null
           is_active?: boolean
+          margin_percentage?: number | null
           mrp?: number
           name: string
           price?: number
@@ -988,6 +993,7 @@ export type Database = {
           image_url_2?: string | null
           image_url_3?: string | null
           is_active?: boolean
+          margin_percentage?: number | null
           mrp?: number
           name?: string
           price?: number
@@ -1236,6 +1242,7 @@ export type Database = {
           is_active: boolean
           is_approved: boolean
           is_featured: boolean
+          margin_percentage: number | null
           mrp: number
           name: string
           price: number
@@ -1262,6 +1269,7 @@ export type Database = {
           is_active?: boolean
           is_approved?: boolean
           is_featured?: boolean
+          margin_percentage?: number | null
           mrp?: number
           name: string
           price?: number
@@ -1288,6 +1296,7 @@ export type Database = {
           is_active?: boolean
           is_approved?: boolean
           is_featured?: boolean
+          margin_percentage?: number | null
           mrp?: number
           name?: string
           price?: number
