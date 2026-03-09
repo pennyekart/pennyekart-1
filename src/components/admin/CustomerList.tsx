@@ -624,7 +624,7 @@ const CustomerList = ({ customers, orderSummaries, walletSummaries, onRefresh }:
                       {c.referred_by && (
                         <Badge className="text-[9px] px-1.5 py-0 bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400 border-0 gap-0.5">
                           <UserPlus className="h-2.5 w-2.5" />
-                          {c.referrer_name ? `c/o ${c.referrer_name}` : "Referred"}
+                          {c.referrer_name ? `Ref: ${c.referrer_name}` : "Referred"}
                         </Badge>
                       )}
                     </div>

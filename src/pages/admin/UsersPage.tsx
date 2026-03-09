@@ -79,10 +79,10 @@ const UsersPage = () => {
 
     const allProfiles = (usersRes.data ?? []) as unknown as Profile[];
     
-    // Build a map of profile id -> full_name for referrer lookups
-    const profileIdToName = new Map<string, string>();
+    // Build a map of profile id -> mobile_number for referrer lookups
+    const profileIdToMobile = new Map<string, string>();
     allProfiles.forEach((p) => {
-      if (p.id && p.full_name) profileIdToName.set(p.id, p.full_name);
+      if (p.id && p.mobile_number) profileIdToMobile.set(p.id, p.mobile_number);
     });
 
     const enrichedUsers = allProfiles.map((u) => {
@@ -97,7 +97,7 @@ const UsersPage = () => {
         }
       }
       if ((u as any).referred_by) {
-        enriched.referrer_name = profileIdToName.get((u as any).referred_by) || null;
+        enriched.referrer_name = profileIdToMobile.get((u as any).referred_by) || null;
       }
       return enriched;
     });
