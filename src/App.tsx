@@ -37,6 +37,7 @@ import StockControlPage from "./pages/admin/StockControlPage";
 import ReportsPage from "./pages/admin/ReportsPage";
 import WalletManagementPage from "./pages/admin/WalletManagementPage";
 import PennyPrimePage from "./pages/admin/PennyPrimePage";
+import PlatformMarginPage from "./pages/admin/PlatformMarginPage";
 import PennyPrimePublic from "./pages/PennyPrime";
 import DeliveryStaffSignup from "./pages/delivery-staff/Signup";
 import DeliveryStaffLogin from "./pages/delivery-staff/Login";
