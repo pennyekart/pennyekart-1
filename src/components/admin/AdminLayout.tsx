@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   LayoutDashboard, Users, ShieldCheck, Package, ShoppingCart,
-  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal, BarChart3, Wallet, Handshake, Menu, X,
+  Image, LogOut, ChevronLeft, Settings, Grid3X3, Wrench, MapPin, Warehouse, ClipboardList, Truck, Store, Star, SlidersHorizontal, BarChart3, Wallet, Handshake, Menu, X, Percent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -28,6 +28,7 @@ const navItems = [
   { label: "App Settings", icon: SlidersHorizontal, path: "/admin/settings", perm: "read_products" },
   { label: "Storage Config", icon: Settings, path: "/admin/storage", perm: null, superOnly: true },
   { label: "Wallets", icon: Wallet, path: "/admin/wallets", perm: "read_users" },
+  { label: "Platform Margin", icon: Percent, path: "/admin/platform-margin", perm: "read_products" },
   { label: "Penny Prime", icon: Handshake, path: "/admin/penny-prime", perm: "read_orders" },
   { label: "Reports", icon: BarChart3, path: "/admin/reports", perm: "read_orders" },
 ];
