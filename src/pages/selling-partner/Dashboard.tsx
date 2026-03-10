@@ -43,7 +43,7 @@ interface SellerProduct {
 }
 
 interface Godown { id: string; name: string; }
-interface Category { id: string; name: string; category_type: string; variation_type: string | null; }
+interface Category { id: string; name: string; category_type: string; variation_type: string | null; margin_percentage: number | null; }
 
 interface Order {
   id: string;
