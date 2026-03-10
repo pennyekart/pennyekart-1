@@ -35,6 +35,7 @@ import AppSettingsPage from "./pages/admin/AppSettingsPage";
 import StorageConfigPage from "./pages/admin/StorageConfigPage";
 import StockControlPage from "./pages/admin/StockControlPage";
 import ReportsPage from "./pages/admin/ReportsPage";
+import SalesReportPage from "./pages/admin/SalesReportPage";
 import WalletManagementPage from "./pages/admin/WalletManagementPage";
 import PennyPrimePage from "./pages/admin/PennyPrimePage";
 import PlatformMarginPage from "./pages/admin/PlatformMarginPage";
