@@ -236,6 +236,8 @@ const ProductsPage = () => {
       coming_soon: sellerForm.coming_soon, image_url: sellerForm.image_url || null,
       image_url_2: sellerForm.image_url_2 || null, image_url_3: sellerForm.image_url_3 || null,
       video_url: sellerForm.video_url || null, wallet_points: sellerForm.wallet_points,
+      featured_discount_type: sellerForm.is_featured ? sellerForm.featured_discount_type : 'amount',
+      featured_discount_value: sellerForm.is_featured ? sellerForm.featured_discount_value : 0,
       // margin_percentage is NOT updated here — managed only via Platform Margin page
     }).eq("id", sellerEditId);
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
