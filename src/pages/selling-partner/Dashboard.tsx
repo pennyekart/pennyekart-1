@@ -333,6 +333,9 @@ const SellingPartnerDashboard = () => {
     const purchaseRate = parseFloat(form.purchase_rate) || 0;
     const { price, discount } = calcPriceFromMargin(purchaseRate, mrp, form.category);
     const godownId = form.area_godown_id || (assignedGodowns.length === 1 ? assignedGodowns[0].id : null);
+    // Auto-disable featured if no discount value
+    const featuredDiscountVal = parseFloat(form.featured_discount_value) || 0;
+    const isFeatured = form.is_featured && featuredDiscountVal > 0;
     const { error } = await supabase.from("seller_products").insert({
       seller_id: user.id,
       name: form.name.trim(),
@@ -346,9 +349,9 @@ const SellingPartnerDashboard = () => {
       image_url: form.image_url || null,
       image_url_2: form.image_url_2 || null,
       image_url_3: form.image_url_3 || null,
-      is_featured: form.is_featured,
-      featured_discount_type: form.is_featured ? form.featured_discount_type : 'amount',
-      featured_discount_value: form.is_featured ? (parseFloat(form.featured_discount_value) || 0) : 0,
+      is_featured: isFeatured,
+      featured_discount_type: isFeatured ? form.featured_discount_type : 'amount',
+      featured_discount_value: isFeatured ? featuredDiscountVal : 0,
       video_url: form.video_url.trim() || null,
       wallet_points: parseFloat(form.wallet_points) || 0,
     });
@@ -383,6 +386,9 @@ const SellingPartnerDashboard = () => {
     const mrp = parseFloat(editForm.mrp) || 0;
     const purchaseRate = parseFloat(editForm.purchase_rate) || 0;
     const { price, discount } = calcPriceFromMargin(purchaseRate, mrp, editForm.category);
+    // Auto-disable featured if no discount value
+    const featuredDiscountVal = parseFloat(editForm.featured_discount_value) || 0;
+    const isFeatured = editForm.is_featured && featuredDiscountVal > 0;
     const { error } = await supabase.from("seller_products").update({
       name: editForm.name.trim(),
       description: editForm.description.trim() || null,
@@ -395,9 +401,9 @@ const SellingPartnerDashboard = () => {
       image_url: editForm.image_url || null,
       image_url_2: editForm.image_url_2 || null,
       image_url_3: editForm.image_url_3 || null,
-      is_featured: editForm.is_featured,
-      featured_discount_type: editForm.is_featured ? editForm.featured_discount_type : 'amount',
-      featured_discount_value: editForm.is_featured ? (parseFloat(editForm.featured_discount_value) || 0) : 0,
+      is_featured: isFeatured,
+      featured_discount_type: isFeatured ? editForm.featured_discount_type : 'amount',
+      featured_discount_value: isFeatured ? featuredDiscountVal : 0,
       video_url: editForm.video_url.trim() || null,
       wallet_points: parseFloat(editForm.wallet_points) || 0,
     }).eq("id", editProduct.id);
