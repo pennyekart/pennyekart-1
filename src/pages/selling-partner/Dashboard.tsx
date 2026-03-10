@@ -396,6 +396,8 @@ const SellingPartnerDashboard = () => {
       image_url_2: editForm.image_url_2 || null,
       image_url_3: editForm.image_url_3 || null,
       is_featured: editForm.is_featured,
+      featured_discount_type: editForm.is_featured ? editForm.featured_discount_type : 'amount',
+      featured_discount_value: editForm.is_featured ? (parseFloat(editForm.featured_discount_value) || 0) : 0,
       video_url: editForm.video_url.trim() || null,
       wallet_points: parseFloat(editForm.wallet_points) || 0,
     }).eq("id", editProduct.id);
