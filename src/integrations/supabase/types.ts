@@ -936,6 +936,8 @@ export type Database = {
           created_by: string | null
           description: string | null
           discount_rate: number
+          featured_discount_type: string
+          featured_discount_value: number
           id: string
           image_url: string | null
           image_url_2: string | null
@@ -962,6 +964,8 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           discount_rate?: number
+          featured_discount_type?: string
+          featured_discount_value?: number
           id?: string
           image_url?: string | null
           image_url_2?: string | null
@@ -988,6 +992,8 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           discount_rate?: number
+          featured_discount_type?: string
+          featured_discount_value?: number
           id?: string
           image_url?: string | null
           image_url_2?: string | null
@@ -1248,6 +1254,8 @@ export type Database = {
           created_at: string
           description: string | null
           discount_rate: number
+          featured_discount_type: string
+          featured_discount_value: number
           id: string
           image_url: string | null
           image_url_2: string | null
@@ -1275,6 +1283,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           discount_rate?: number
+          featured_discount_type?: string
+          featured_discount_value?: number
           id?: string
           image_url?: string | null
           image_url_2?: string | null
@@ -1302,6 +1312,8 @@ export type Database = {
           created_at?: string
           description?: string | null
           discount_rate?: number
+          featured_discount_type?: string
+          featured_discount_value?: number
           id?: string
           image_url?: string | null
           image_url_2?: string | null
