@@ -302,17 +302,7 @@ const UsersPage = () => {
 
           {/* Pagination */}
           {filteredUsers.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Show</span>
-                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[10, 25, 50, 100].map((s) => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <span>of {filteredUsers.length} users</span>
-              </div>
+             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>
                   <ChevronLeft className="h-4 w-4" />
@@ -332,6 +322,16 @@ const UsersPage = () => {
                 <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Show</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map((s) => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <span>of {filteredUsers.length} users</span>
               </div>
             </div>
           )}
