@@ -158,7 +158,13 @@ const UsersPage = () => {
     }
     return result;
   }, [users, filterType, filterRole, searchQuery]);
+
+  // Reset page when filters change
+  useMemo(() => { setCurrentPage(1); }, [filterType, filterRole, searchQuery]);
+
   const isCustomerTab = filterType === "customer";
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const updateRole = async (userId: string, roleId: string) => {
     const { error } = await supabase.from("profiles").update({ role_id: roleId === "none" ? null : roleId }).eq("user_id", userId);
