@@ -19,7 +19,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, TrendingDown, ShoppingCart, Package, Users, Wallet,
-  Store, Truck, BarChart3, AlertTriangle, CheckCircle
+  Store, Truck, BarChart3, AlertTriangle, CheckCircle, Search
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -69,6 +69,7 @@ const ReportsPage = () => {
   const [localBodies, setLocalBodies] = useState<LocalBody[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchHistory, setSearchHistory] = useState<{ search_query: string; result_count: number | null; created_at: string; customer_user_id: string }[]>([]);
 
   // ─── Filters ───────────────────────────────────────────────────────────────
   const [dateRange, setDateRange] = useState<string>("all");
@@ -172,7 +173,8 @@ const ReportsPage = () => {
       setLoading(true);
       const [
         { data: ord }, { data: prod }, { data: sprod }, { data: gstock },
-        { data: prof }, { data: sw }, { data: stxn }, { data: lb }, { data: dist }
+        { data: prof }, { data: sw }, { data: stxn }, { data: lb }, { data: dist },
+        { data: sh }
       ] = await Promise.all([
         supabase.from("orders").select("id,status,total,items,created_at,user_id,seller_id,assigned_delivery_staff_id,godown_id").order("created_at", { ascending: false }),
         supabase.from("products").select("id,name,price,purchase_rate,mrp,stock,is_active,category"),
@@ -183,6 +185,7 @@ const ReportsPage = () => {
         supabase.from("seller_wallet_transactions").select("seller_id,type,amount,description"),
         supabase.from("locations_local_bodies").select("id,name,district_id,ward_count"),
         supabase.from("locations_districts").select("id,name"),
+        supabase.from("customer_search_history").select("search_query,result_count,created_at,customer_user_id").order("created_at", { ascending: false }),
       ]);
       setOrders((ord ?? []) as Order[]);
       setProducts((prod ?? []) as Product[]);
@@ -193,6 +196,7 @@ const ReportsPage = () => {
       setSellerTxns((stxn ?? []) as SellerWalletTxn[]);
       setLocalBodies((lb ?? []) as LocalBody[]);
       setDistricts((dist ?? []) as District[]);
+      setSearchHistory(sh ?? []);
       setLoading(false);
     };
     load();
@@ -318,6 +322,51 @@ const ReportsPage = () => {
     });
   });
   const catData = Object.values(catMap).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+
+  // ─── Search Analytics ────────────────────────────────────────────────────
+  const filteredSearchHistory = useMemo(() => {
+    if (!dateFrom || !dateTo) return searchHistory;
+    return searchHistory.filter(s => {
+      const d = new Date(s.created_at);
+      return isWithinInterval(d, { start: startOfDay(dateFrom), end: endOfDay(dateTo) });
+    });
+  }, [searchHistory, dateFrom, dateTo]);
+
+  const searchAnalytics = useMemo(() => {
+    const queryCount: Record<string, { count: number; totalResults: number; zeroCount: number }> = {};
+    filteredSearchHistory.forEach(s => {
+      const q = s.search_query.toLowerCase().trim();
+      if (!queryCount[q]) queryCount[q] = { count: 0, totalResults: 0, zeroCount: 0 };
+      queryCount[q].count++;
+      queryCount[q].totalResults += s.result_count ?? 0;
+      if ((s.result_count ?? 0) === 0) queryCount[q].zeroCount++;
+    });
+
+    const topSearches = Object.entries(queryCount)
+      .map(([query, v]) => ({ query, count: v.count, avgResults: v.count > 0 ? Math.round(v.totalResults / v.count) : 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    const zeroResultSearches = Object.entries(queryCount)
+      .filter(([, v]) => v.zeroCount > 0)
+      .map(([query, v]) => ({ query, count: v.zeroCount }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+
+    // Daily search volume (last 30 entries)
+    const dailyMap: Record<string, number> = {};
+    filteredSearchHistory.forEach(s => {
+      const day = format(new Date(s.created_at), "dd MMM");
+      dailyMap[day] = (dailyMap[day] || 0) + 1;
+    });
+    const dailyVolume = Object.entries(dailyMap).slice(-30).map(([day, searches]) => ({ day, searches }));
+
+    const uniqueSearchers = new Set(filteredSearchHistory.map(s => s.customer_user_id)).size;
+    const totalSearches = filteredSearchHistory.length;
+    const zeroResultTotal = filteredSearchHistory.filter(s => (s.result_count ?? 0) === 0).length;
+
+    return { topSearches, zeroResultSearches, dailyVolume, uniqueSearchers, totalSearches, zeroResultTotal };
+  }, [filteredSearchHistory]);
 
   if (loading) {
     return (
@@ -482,6 +531,7 @@ const ReportsPage = () => {
           <TabsTrigger value="delivery">Delivery</TabsTrigger>
           <TabsTrigger value="stock">Stock</TabsTrigger>
           <TabsTrigger value="geography">Geography</TabsTrigger>
+          <TabsTrigger value="search">Search</TabsTrigger>
         </TabsList>
 
         {/* ── OVERVIEW ── */}
@@ -931,6 +981,111 @@ const ReportsPage = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── SEARCH ANALYTICS ── */}
+        <TabsContent value="search" className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total Searches" value={String(searchAnalytics.totalSearches)} icon={Search} sub="all time filtered" />
+            <StatCard label="Unique Searchers" value={String(searchAnalytics.uniqueSearchers)} icon={Users} sub="distinct customers" />
+            <StatCard label="Zero-Result Searches" value={String(searchAnalytics.zeroResultTotal)} icon={AlertTriangle} sub={pct(searchAnalytics.zeroResultTotal, searchAnalytics.totalSearches) + " of searches"} color="text-destructive" />
+            <StatCard label="Avg Searches/User" value={searchAnalytics.uniqueSearchers > 0 ? (searchAnalytics.totalSearches / searchAnalytics.uniqueSearchers).toFixed(1) : "0"} icon={BarChart3} />
+          </div>
+
+          {/* Search Volume Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Daily Search Volume</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {searchAnalytics.dailyVolume.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No search data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={searchAnalytics.dailyVolume}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="day" className="text-xs" />
+                    <YAxis className="text-xs" />
+                    <Tooltip />
+                    <Bar dataKey="searches" name="Searches" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Top Searches */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Top Searches</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {searchAnalytics.topSearches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No search data</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Search Query</TableHead>
+                        <TableHead className="text-right">Count</TableHead>
+                        <TableHead className="text-right">Avg Results</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {searchAnalytics.topSearches.map((s, i) => (
+                        <TableRow key={s.query}>
+                          <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{s.query}</TableCell>
+                          <TableCell className="text-right">{s.count}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={s.avgResults === 0 ? "destructive" : "secondary"}>{s.avgResults}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Zero-Result Searches */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  Zero-Result Searches
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {searchAnalytics.zeroResultSearches.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No zero-result searches found 🎉</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Search Query</TableHead>
+                        <TableHead className="text-right">Times</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {searchAnalytics.zeroResultSearches.map((s, i) => (
+                        <TableRow key={s.query}>
+                          <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{s.query}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="destructive">{s.count}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </AdminLayout>
