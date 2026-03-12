@@ -173,7 +173,8 @@ const ReportsPage = () => {
       setLoading(true);
       const [
         { data: ord }, { data: prod }, { data: sprod }, { data: gstock },
-        { data: prof }, { data: sw }, { data: stxn }, { data: lb }, { data: dist }
+        { data: prof }, { data: sw }, { data: stxn }, { data: lb }, { data: dist },
+        { data: sh }
       ] = await Promise.all([
         supabase.from("orders").select("id,status,total,items,created_at,user_id,seller_id,assigned_delivery_staff_id,godown_id").order("created_at", { ascending: false }),
         supabase.from("products").select("id,name,price,purchase_rate,mrp,stock,is_active,category"),
@@ -184,6 +185,7 @@ const ReportsPage = () => {
         supabase.from("seller_wallet_transactions").select("seller_id,type,amount,description"),
         supabase.from("locations_local_bodies").select("id,name,district_id,ward_count"),
         supabase.from("locations_districts").select("id,name"),
+        supabase.from("customer_search_history").select("search_query,result_count,created_at,customer_user_id").order("created_at", { ascending: false }),
       ]);
       setOrders((ord ?? []) as Order[]);
       setProducts((prod ?? []) as Product[]);
@@ -194,6 +196,7 @@ const ReportsPage = () => {
       setSellerTxns((stxn ?? []) as SellerWalletTxn[]);
       setLocalBodies((lb ?? []) as LocalBody[]);
       setDistricts((dist ?? []) as District[]);
+      setSearchHistory(sh ?? []);
       setLoading(false);
     };
     load();
