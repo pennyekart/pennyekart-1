@@ -227,6 +227,65 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_charge_rules: {
+        Row: {
+          category_name: string | null
+          charge_amount: number
+          created_at: string
+          godown_id: string | null
+          id: string
+          is_active: boolean
+          min_purchase_amount: number | null
+          name: string
+          priority: number
+          rule_type: string
+          time_slot_end: string | null
+          time_slot_label: string | null
+          time_slot_start: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_name?: string | null
+          charge_amount?: number
+          created_at?: string
+          godown_id?: string | null
+          id?: string
+          is_active?: boolean
+          min_purchase_amount?: number | null
+          name: string
+          priority?: number
+          rule_type: string
+          time_slot_end?: string | null
+          time_slot_label?: string | null
+          time_slot_start?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_name?: string | null
+          charge_amount?: number
+          created_at?: string
+          godown_id?: string | null
+          id?: string
+          is_active?: boolean
+          min_purchase_amount?: number | null
+          name?: string
+          priority?: number
+          rule_type?: string
+          time_slot_end?: string | null
+          time_slot_label?: string | null
+          time_slot_start?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_charge_rules_godown_id_fkey"
+            columns: ["godown_id"]
+            isOneToOne: false
+            referencedRelation: "godowns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_staff_wallet_transactions: {
         Row: {
           amount: number
@@ -660,6 +719,7 @@ export type Database = {
         Row: {
           assigned_delivery_staff_id: string | null
           created_at: string
+          delivery_charge: number
           godown_id: string | null
           id: string
           is_self_delivery: boolean
@@ -675,6 +735,7 @@ export type Database = {
         Insert: {
           assigned_delivery_staff_id?: string | null
           created_at?: string
+          delivery_charge?: number
           godown_id?: string | null
           id?: string
           is_self_delivery?: boolean
@@ -690,6 +751,7 @@ export type Database = {
         Update: {
           assigned_delivery_staff_id?: string | null
           created_at?: string
+          delivery_charge?: number
           godown_id?: string | null
           id?: string
           is_self_delivery?: boolean
@@ -1572,6 +1634,7 @@ export type Database = {
         Returns: {
           assigned_delivery_staff_id: string | null
           created_at: string
+          delivery_charge: number
           godown_id: string | null
           id: string
           is_self_delivery: boolean

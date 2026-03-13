@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import WalletRewardPopup from "@/components/WalletRewardPopup";
+import { useDeliveryCharge } from "@/hooks/useDeliveryCharge";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -83,11 +84,15 @@ const Cart = () => {
   const totalDiscount = totalMrp - totalPrice;
   const platformFee = items.length > 0 ? 7 : 0;
   const couponDiscount = appliedCoupon?.discount ?? 0;
-  const orderSubtotal = totalPrice + platformFee - couponDiscount;
+  const preDeliverySubtotal = totalPrice + platformFee - couponDiscount;
+  
+  const { totalCharge: deliveryCharge, isFreeDelivery, freeDeliveryThreshold, amountToFreeDelivery, breakdown: deliveryBreakdown } = useDeliveryCharge(items, totalPrice);
+  
+  const orderSubtotal = preDeliverySubtotal + deliveryCharge;
   const canUseWallet = walletBalance > 0 && orderSubtotal >= walletMinUsage;
   const maxRedeemable = walletMaxRedeem !== null ? Math.min(walletBalance, walletMaxRedeem) : walletBalance;
   const walletDeduction = useWallet && canUseWallet ? Math.min(maxRedeemable, orderSubtotal) : 0;
-  const finalAmount = totalPrice + platformFee - couponDiscount - walletDeduction;
+  const finalAmount = preDeliverySubtotal + deliveryCharge - walletDeduction;
   const hasComingSoonItems = items.some(i => i.coming_soon);
 
   const handleApplyCoupon = async () => {
@@ -330,7 +335,8 @@ const Cart = () => {
         ordersToInsert.push({
           user_id: user!.id,
           items: mapOrderItems(microItems),
-          total: microTotal,
+          total: microTotal + deliveryCharge,
+          delivery_charge: deliveryCharge,
           status: "pending",
           shipping_address: deliveryAddress,
         });
@@ -673,8 +679,27 @@ const Cart = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-foreground">Delivery Charges</span>
-                  <span className="font-medium text-secondary">Free</span>
+                  {isFreeDelivery ? (
+                    <span className="font-medium text-secondary">Free</span>
+                  ) : (
+                    <span className="text-foreground">₹{deliveryCharge.toFixed(2)}</span>
+                  )}
                 </div>
+                {!isFreeDelivery && freeDeliveryThreshold && amountToFreeDelivery > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Add ₹{amountToFreeDelivery.toFixed(0)} more for free delivery
+                  </p>
+                )}
+                {!isFreeDelivery && deliveryBreakdown.length > 1 && (
+                  <div className="pl-3 space-y-1">
+                    {deliveryBreakdown.map((b, i) => (
+                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                        <span>{b.label}</span>
+                        <span>₹{b.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {couponDiscount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-foreground">Coupon Discount</span>
