@@ -678,8 +678,27 @@ const Cart = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-foreground">Delivery Charges</span>
-                  <span className="font-medium text-secondary">Free</span>
+                  {isFreeDelivery ? (
+                    <span className="font-medium text-secondary">Free</span>
+                  ) : (
+                    <span className="text-foreground">₹{deliveryCharge.toFixed(2)}</span>
+                  )}
                 </div>
+                {!isFreeDelivery && freeDeliveryThreshold && amountToFreeDelivery > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Add ₹{amountToFreeDelivery.toFixed(0)} more for free delivery
+                  </p>
+                )}
+                {!isFreeDelivery && deliveryBreakdown.length > 1 && (
+                  <div className="pl-3 space-y-1">
+                    {deliveryBreakdown.map((b, i) => (
+                      <div key={i} className="flex justify-between text-xs text-muted-foreground">
+                        <span>{b.label}</span>
+                        <span>₹{b.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {couponDiscount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-foreground">Coupon Discount</span>
