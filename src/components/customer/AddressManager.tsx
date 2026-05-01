@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, LocateFixed, Search, Loader2, ExternalLink, Trash2, Pencil, Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 interface NominatimResult {
   place_id: number;
@@ -33,8 +34,19 @@ interface NominatimResult {
   lon: string;
 }
 
+// India bounds (approx) for biasing search + map
+const INDIA_BOUNDS = {
+  south: 6.5,
+  west: 68.0,
+  north: 35.8,
+  east: 97.5,
+};
+const INDIA_CENTER = { lat: 20.5937, lng: 78.9629 };
+
 const AddressManager = () => {
   const { user } = useAuth();
+  const gmapsStatus = useGoogleMaps();
+  const useGoogle = gmapsStatus === "ready";
 
   const [loading, setLoading] = useState(true);
   const [savedAddress, setSavedAddress] = useState<string | null>(null);
@@ -56,6 +68,13 @@ const AddressManager = () => {
 
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
+
+  // Google Maps refs
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
+  const autocompleteRef = useRef<any>(null);
 
   // Load saved address
   useEffect(() => {
@@ -80,7 +99,7 @@ const AddressManager = () => {
 
   // Debounced place search
   useEffect(() => {
-    if (!dialogOpen) return;
+    if (!dialogOpen || useGoogle) return; // Google handles its own autocomplete
     const q = searchQuery.trim();
     if (q.length < 3) {
       setResults([]);
@@ -111,7 +130,101 @@ const AddressManager = () => {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [searchQuery, dialogOpen]);
+  }, [searchQuery, dialogOpen, useGoogle]);
+
+  // Initialize Google Map + Autocomplete when dialog opens
+  useEffect(() => {
+    if (!dialogOpen || !useGoogle) return;
+    const g = (window as any).google;
+    if (!g?.maps) return;
+
+    // Defer to next tick so refs mount
+    const t = setTimeout(() => {
+      if (!mapDivRef.current) return;
+      const startLat = editLat ?? INDIA_CENTER.lat;
+      const startLng = editLng ?? INDIA_CENTER.lng;
+      const startZoom = editLat != null && editLng != null ? 16 : 5;
+
+      mapRef.current = new g.maps.Map(mapDivRef.current, {
+        center: { lat: startLat, lng: startLng },
+        zoom: startZoom,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        restriction: {
+          latLngBounds: INDIA_BOUNDS,
+          strictBounds: false,
+        },
+      });
+
+      markerRef.current = new g.maps.Marker({
+        map: mapRef.current,
+        position: { lat: startLat, lng: startLng },
+        draggable: true,
+        visible: editLat != null && editLng != null,
+      });
+
+      const handlePos = async (lat: number, lng: number) => {
+        setEditLat(lat);
+        setEditLng(lng);
+        markerRef.current.setPosition({ lat, lng });
+        markerRef.current.setVisible(true);
+        // Reverse geocode
+        try {
+          const geocoder = new g.maps.Geocoder();
+          const res = await geocoder.geocode({ location: { lat, lng } });
+          const formatted = res?.results?.[0]?.formatted_address;
+          if (formatted) setEditAddress(formatted);
+        } catch {
+          /* ignore */
+        }
+      };
+
+      mapRef.current.addListener("click", (e: any) => {
+        if (!e.latLng) return;
+        handlePos(e.latLng.lat(), e.latLng.lng());
+      });
+      markerRef.current.addListener("dragend", (e: any) => {
+        if (!e.latLng) return;
+        handlePos(e.latLng.lat(), e.latLng.lng());
+      });
+
+      // Places Autocomplete
+      if (autocompleteInputRef.current) {
+        autocompleteRef.current = new g.maps.places.Autocomplete(autocompleteInputRef.current, {
+          componentRestrictions: { country: "in" },
+          fields: ["formatted_address", "geometry", "name"],
+          bounds: new g.maps.LatLngBounds(
+            { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
+            { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
+          ),
+        });
+        autocompleteRef.current.addListener("place_changed", () => {
+          const place = autocompleteRef.current.getPlace();
+          if (!place?.geometry?.location) {
+            toast.error("Please pick a place from the suggestions");
+            return;
+          }
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          setEditLat(lat);
+          setEditLng(lng);
+          setEditAddress(place.formatted_address || place.name || "");
+          markerRef.current.setPosition({ lat, lng });
+          markerRef.current.setVisible(true);
+          mapRef.current.panTo({ lat, lng });
+          mapRef.current.setZoom(16);
+        });
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(t);
+      mapRef.current = null;
+      markerRef.current = null;
+      autocompleteRef.current = null;
+    };
+  }, [dialogOpen, useGoogle]);
 
   const openAdd = () => {
     setEditAddress("");
@@ -151,6 +264,29 @@ const AddressManager = () => {
         const { latitude, longitude } = position.coords;
         setEditLat(latitude);
         setEditLng(longitude);
+        // Update map if active
+        if (useGoogle && mapRef.current && markerRef.current) {
+          markerRef.current.setPosition({ lat: latitude, lng: longitude });
+          markerRef.current.setVisible(true);
+          mapRef.current.panTo({ lat: latitude, lng: longitude });
+          mapRef.current.setZoom(16);
+          try {
+            const g = (window as any).google;
+            const geocoder = new g.maps.Geocoder();
+            const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
+            const formatted = res?.results?.[0]?.formatted_address;
+            if (formatted) {
+              setEditAddress(formatted);
+              toast.success("Location detected and address filled");
+            } else {
+              toast.success("Location detected");
+            }
+          } catch {
+            toast.success("Location detected");
+          }
+          setGpsLoading(false);
+          return;
+        }
         // Reverse geocode to pre-fill address
         try {
           const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
@@ -186,6 +322,19 @@ const AddressManager = () => {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+
+  const mapStatusLabel = useMemo(() => {
+    switch (gmapsStatus) {
+      case "loading":
+        return "Loading Google Maps…";
+      case "no-key":
+        return "Google Maps not configured by admin — using basic search.";
+      case "error":
+        return "Could not load Google Maps — using basic search.";
+      default:
+        return null;
+    }
+  }, [gmapsStatus]);
 
   const handleSave = async () => {
     if (!user) {
@@ -308,11 +457,27 @@ const AddressManager = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {mapStatusLabel && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5">
+                {mapStatusLabel}
+              </p>
+            )}
+
             {/* Search a place */}
             <div>
               <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Search a place
               </label>
+              {useGoogle ? (
+                <div className="relative mt-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                  <Input
+                    ref={autocompleteInputRef}
+                    placeholder="Search city, area, landmark in India..."
+                    className="pl-8"
+                  />
+                </div>
+              ) : (
               <div className="relative mt-1">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -325,7 +490,8 @@ const AddressManager = () => {
                   <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
                 )}
               </div>
-              {results.length > 0 && (
+              )}
+              {!useGoogle && results.length > 0 && (
                 <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-popover">
                   {results.map((r) => (
                     <button
@@ -339,10 +505,26 @@ const AddressManager = () => {
                   ))}
                 </div>
               )}
-              {!searching && searchQuery.trim().length >= 3 && results.length === 0 && (
+              {!useGoogle && !searching && searchQuery.trim().length >= 3 && results.length === 0 && (
                 <p className="mt-1 text-xs text-muted-foreground">No matching places.</p>
               )}
             </div>
+
+            {/* Interactive Google Map */}
+            {useGoogle && (
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Pick on map (drag pin)
+                </label>
+                <div
+                  ref={mapDivRef}
+                  className="mt-1 h-56 w-full rounded-md border border-border bg-muted"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tap the map or drag the pin to set the exact delivery point.
+                </p>
+              </div>
+            )}
 
             {/* Use current GPS */}
             <Button
