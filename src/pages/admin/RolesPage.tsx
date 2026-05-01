@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Shield, Users, Clock, Edit2, Check, X, LayoutDashboard, ShoppingCart, Package, MapPin, Warehouse, Tags, Zap, Wallet, Settings, HardDrive, Truck, FileText, Crown, Image, Bot, Bell, Gift } from "lucide-react";
+import { Plus, Trash2, Shield, Users, Clock, Edit2, Check, X, LayoutDashboard, ShoppingCart, Package, MapPin, Warehouse, Tags, Zap, Wallet, Settings, HardDrive, Truck, FileText, Crown, Image } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Role { id: string; name: string; description: string | null; created_at: string; updated_at: string; }
@@ -37,17 +37,13 @@ const featureIcons: Record<string, React.ComponentType<{ className?: string }>> 
   sellers: Users,
   services: Settings,
   reports: FileText,
-  chatbot: Bot,
-  notifications: Bell,
-  scratch_rewards: Gift,
-  flash_sales: Zap,
 };
 
 const featureOrder = [
   'dashboard', 'users', 'products', 'categories', 'orders', 'banners',
-  'locations', 'godowns', 'stock', 'purchase', 'offers', 'flash_sales', 'penny_prime',
+  'locations', 'godowns', 'stock', 'purchase', 'offers', 'penny_prime',
   'wallets', 'delivery', 'delivery_staff', 'selling_partners', 'sellers',
-  'services', 'reports', 'notifications', 'scratch_rewards', 'chatbot', 'settings', 'storage'
+  'services', 'reports', 'settings', 'storage'
 ];
 
 const RolesPage = () => {

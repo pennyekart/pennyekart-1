@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isAfter, startOfDay } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, CheckCircle2, XCircle } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,8 +36,6 @@ export const TodaysWorkSection = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [monthLogs, setMonthLogs] = useState<WorkLog[]>([]);
-  const [monthCursor, setMonthCursor] = useState<Date>(new Date());
 
   const callFn = async (opts: { method: string; query?: Record<string, string>; body?: any }) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -84,41 +82,7 @@ export const TodaysWorkSection = () => {
     })();
   }, [date, agent?.id]);
 
-  // Load month attendance whenever the calendar's visible month changes
-  useEffect(() => {
-    if (!agent) return;
-    (async () => {
-      const r = await callFn({ method: "GET", query: { month: format(monthCursor, "yyyy-MM") } });
-      if (r.ok) setMonthLogs(r.body.logs || []);
-    })();
-  }, [monthCursor, agent?.id]);
-
   const isToday = useMemo(() => ymd(date) === ymd(new Date()), [date]);
-
-  const attendance = useMemo(() => {
-    const today = startOfDay(new Date());
-    const monthStart = startOfMonth(monthCursor);
-    const monthEnd = endOfMonth(monthCursor);
-    // Cap end at today (don't count future days as absent)
-    const end = isAfter(monthEnd, today) ? today : monthEnd;
-    const days = isAfter(monthStart, today) ? [] : eachDayOfInterval({ start: monthStart, end });
-    const presentSet = new Set(monthLogs.map((l) => l.work_date));
-    const presentDays = days.filter((d) => presentSet.has(ymd(d)));
-    const absentDays = days.filter((d) => !presentSet.has(ymd(d)));
-    return { totalDays: days.length, presentDays, absentDays, presentSet };
-  }, [monthLogs, monthCursor]);
-
-  const selectedAttendance = useMemo(() => {
-    const today = startOfDay(new Date());
-    const sel = startOfDay(date);
-    if (isAfter(sel, today)) return "future" as const;
-    return attendance.presentSet.has(ymd(date)) ? "present" as const : "absent" as const;
-  }, [date, attendance.presentSet]);
-
-  const refreshMonth = async () => {
-    const r = await callFn({ method: "GET", query: { month: format(monthCursor, "yyyy-MM") } });
-    if (r.ok) setMonthLogs(r.body.logs || []);
-  };
 
   const handleAdd = async () => {
     if (!draft.trim()) return;
@@ -127,11 +91,8 @@ export const TodaysWorkSection = () => {
     setSaving(false);
     if (!r.ok) { toast.error(r.body?.error || "Failed to save"); return; }
     setDraft("");
-    // Reload selected day so we see the appended/merged record
-    const reload = await callFn({ method: "GET", query: { date: ymd(date) } });
-    if (reload.ok) setLogs(reload.body.logs || []);
-    refreshMonth();
-    toast.success("Marked present • Saved to e-Life");
+    setLogs((prev) => [r.body.log, ...prev]);
+    toast.success("Work log saved to e-Life");
   };
 
   const handleUpdate = async (id: string) => {
@@ -150,7 +111,6 @@ export const TodaysWorkSection = () => {
     const r = await callFn({ method: "DELETE", query: { id } });
     if (!r.ok) { toast.error(r.body?.error || "Failed to delete"); return; }
     setLogs((prev) => prev.filter((l) => l.id !== id));
-    refreshMonth();
     toast.success("Deleted");
   };
 
@@ -192,17 +152,7 @@ export const TodaysWorkSection = () => {
                 mode="single"
                 selected={date}
                 onSelect={(d) => d && setDate(d)}
-                month={monthCursor}
-                onMonthChange={setMonthCursor}
                 disabled={(d) => d > new Date()}
-                modifiers={{
-                  present: attendance.presentDays,
-                  absent: attendance.absentDays,
-                }}
-                modifiersClassNames={{
-                  present: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-semibold",
-                  absent: "bg-destructive/10 text-destructive/80",
-                }}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
@@ -212,39 +162,6 @@ export const TodaysWorkSection = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Attendance summary for the visible month */}
-        <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="text-xs font-medium text-muted-foreground">
-              Attendance — {format(monthCursor, "MMMM yyyy")}
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 border-0 gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                {attendance.presentDays.length} / {attendance.totalDays} days present
-              </Badge>
-              {attendance.absentDays.length > 0 && (
-                <Badge variant="outline" className="text-destructive border-destructive/30 gap-1">
-                  <XCircle className="h-3 w-3" />
-                  {attendance.absentDays.length} absent
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-muted-foreground">Selected: {format(date, "dd MMM yyyy")}</span>
-            {selectedAttendance === "present" ? (
-              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Present
-              </span>
-            ) : selectedAttendance === "absent" ? (
-              <span className="inline-flex items-center gap-1 text-destructive font-medium">
-                <XCircle className="h-3.5 w-3.5" /> Absent — add an entry to mark present
-              </span>
-            ) : null}
-          </div>
-        </div>
-
         <div className="space-y-2">
           <Textarea
             value={draft}

@@ -17,8 +17,6 @@ import { TodaysWorkSection } from "@/components/customer/TodaysWorkSection";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NotificationDetailDialog from "@/components/NotificationDetailDialog";
-import ScratchCardWidget from "@/components/ScratchCardWidget";
-import LocationPicker, { PickedLocation } from "@/components/LocationPicker";
 
 interface Order {
   id: string;
@@ -70,46 +68,6 @@ const Profile = () => {
   const { notifications, loading: notificationsLoading, markRead } = useNotifications();
   const [selectedNotification, setSelectedNotification] = useState<any>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [savedAddress, setSavedAddress] = useState<string | null>(null);
-  const [savedLat, setSavedLat] = useState<number | null>(null);
-  const [savedLng, setSavedLng] = useState<number | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-
-  // Load saved location whenever user is available or addresses tab opens
-  useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("profiles")
-      .select("business_address, latitude, longitude")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }: any) => {
-        if (!data) return;
-        setSavedAddress(data.business_address ?? null);
-        setSavedLat(data.latitude ?? null);
-        setSavedLng(data.longitude ?? null);
-      });
-  }, [user, activeSection]);
-
-  const handleSaveLocation = async (loc: PickedLocation) => {
-    if (!user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        business_address: loc.address,
-        latitude: loc.lat,
-        longitude: loc.lng,
-      } as any)
-      .eq("user_id", user.id);
-    if (error) {
-      toast.error("Failed to save location");
-      return;
-    }
-    setSavedAddress(loc.address);
-    setSavedLat(loc.lat);
-    setSavedLng(loc.lng);
-    toast.success("Location saved");
-  };
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -464,9 +422,6 @@ const Profile = () => {
         {/* Today's Work — only renders for users matched as a Pennyekart agent in e-Life */}
         {activeSection === "profile" && <TodaysWorkSection />}
 
-        {/* Scratch & Win rewards */}
-        {activeSection === "profile" && <ScratchCardWidget className="px-0" />}
-
         {/* Orders Section */}
         {activeSection === "orders" && (
           <Tabs defaultValue="active" className="w-full">
@@ -510,78 +465,14 @@ const Profile = () => {
         {/* Addresses Section */}
         {activeSection === "addresses" && (
           <Card>
-            <CardContent className="p-4 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-primary" />
-                    My Delivery Location
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Used for order delivery and tracking.
-                  </p>
-                </div>
-                <Button size="sm" onClick={() => setPickerOpen(true)}>
-                  {savedAddress ? "Update" : "Add"}
-                </Button>
-              </div>
-
-              {savedAddress ? (
-                <div className="space-y-3">
-                  <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
-                    <p className="text-sm">{savedAddress}</p>
-                    {savedLat && savedLng && (
-                      <p className="text-xs text-muted-foreground">
-                        Lat: {savedLat.toFixed(6)}, Lng: {savedLng.toFixed(6)}
-                      </p>
-                    )}
-                  </div>
-                  {savedLat && savedLng && (
-                    <div className="rounded-md overflow-hidden border border-border">
-                      <iframe
-                        title="Saved location preview"
-                        width="100%"
-                        height="220"
-                        style={{ border: 0 }}
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        src={`https://www.google.com/maps?q=${savedLat},${savedLng}&z=16&output=embed`}
-                      />
-                    </div>
-                  )}
-                  {savedLat && savedLng && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() =>
-                        window.open(`https://www.google.com/maps?q=${savedLat},${savedLng}`, "_blank")
-                      }
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" /> Open in Google Maps
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-6 text-muted-foreground">
-                  <MapPin className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No location saved yet</p>
-                  <p className="text-xs mt-1">Add your delivery location on the map.</p>
-                </div>
-              )}
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <MapPin className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className="font-medium">Saved Addresses</p>
+              <p className="text-sm mt-1">No saved addresses yet</p>
+              <Button size="sm" className="mt-4">Add Address</Button>
             </CardContent>
           </Card>
         )}
-
-        <LocationPicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          initialLat={savedLat}
-          initialLng={savedLng}
-          initialAddress={savedAddress}
-          onConfirm={handleSaveLocation}
-          title="Set your delivery location"
-        />
 
         {/* Wishlist Section */}
         {activeSection === "wishlist" && (

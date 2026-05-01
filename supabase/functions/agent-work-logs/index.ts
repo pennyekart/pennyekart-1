@@ -88,54 +88,12 @@ serve(async (req) => {
       const work_date = String(body.work_date || "").trim();
       const work_details = String(body.work_details || "").trim();
       if (!work_date || !work_details) return json(400, { error: "work_date and work_details required" });
-
-      // Check if a log already exists for this agent+date (e-Life has unique constraint on agent_id+work_date)
-      const existingRes = await fetch(
-        `${elifeUrl}/rest/v1/agent_work_logs?agent_id=eq.${agent.id}&work_date=eq.${encodeURIComponent(work_date)}&limit=1`,
-        { headers: elifeHeaders },
-      );
-      if (!existingRes.ok) {
-        const t = await existingRes.text();
-        console.error("agent-work-logs lookup failed", t);
-        return json(502, { error: "lookup failed", details: t });
-      }
-      const existing = (await existingRes.json())?.[0];
-
-      // Timestamp prefix HH:MM (IST)
-      const now = new Date();
-      const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-      const hh = String(ist.getUTCHours()).padStart(2, "0");
-      const mm = String(ist.getUTCMinutes()).padStart(2, "0");
-      const stamped = `[${hh}:${mm}] ${work_details}`;
-
-      if (existing) {
-        const merged = `${existing.work_details || ""}\n\n${stamped}`.trim();
-        const r = await fetch(
-          `${elifeUrl}/rest/v1/agent_work_logs?id=eq.${existing.id}`,
-          {
-            method: "PATCH",
-            headers: elifeHeaders,
-            body: JSON.stringify({ work_details: merged, updated_at: new Date().toISOString() }),
-          },
-        );
-        if (!r.ok) {
-          const t = await r.text();
-          console.error("agent-work-logs append failed", t);
-          return json(502, { error: "append failed", details: t });
-        }
-        return json(200, { ok: true, log: (await r.json())?.[0], appended: true });
-      }
-
       const r = await fetch(`${elifeUrl}/rest/v1/agent_work_logs`, {
         method: "POST",
         headers: elifeHeaders,
-        body: JSON.stringify({ agent_id: agent.id, work_date, work_details: stamped }),
+        body: JSON.stringify({ agent_id: agent.id, work_date, work_details }),
       });
-      if (!r.ok) {
-        const t = await r.text();
-        console.error("agent-work-logs insert failed", t);
-        return json(502, { error: "insert failed", details: t });
-      }
+      if (!r.ok) return json(502, { error: "insert failed", details: await r.text() });
       return json(200, { ok: true, log: (await r.json())?.[0] });
     }
 

@@ -15,8 +15,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { Plus, Pencil, Trash2, ExternalLink, Clock, Store, CheckCircle, XCircle, Percent, Calculator, Star, Search, Eye } from "lucide-react";
 import ImageUpload from "@/components/admin/ImageUpload";
 import ProductVariants from "@/components/admin/ProductVariants";
-import MicroGodownAssignDialog from "@/components/admin/MicroGodownAssignDialog";
-import { Warehouse } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Product {
@@ -48,8 +46,6 @@ interface SellerProduct {
   seller_id: string;
   created_at: string;
   margin_percentage?: number | null;
-  is_grocery?: boolean;
-  assign_to_all_micro_godowns?: boolean;
 }
 
 interface Category {
@@ -83,10 +79,6 @@ const ProductsPage = () => {
   const [ownSearch, setOwnSearch] = useState("");
   const [sellerSearch, setSellerSearch] = useState("");
   const [sellerFilter, setSellerFilter] = useState("");
-  const [sellerGroceryFilter, setSellerGroceryFilter] = useState<"all" | "grocery" | "non_grocery" | "unassigned_grocery">("all");
-  const [microGodownCounts, setMicroGodownCounts] = useState<Record<string, number>>({});
-  const [microGodownTotal, setMicroGodownTotal] = useState(0);
-  const [assignDialog, setAssignDialog] = useState<{ id: string; name: string } | null>(null);
   const [detailProduct, setDetailProduct] = useState<(Product | SellerProduct) | null>(null);
   const [detailType, setDetailType] = useState<"own" | "seller">("own");
   const [detailSellerInfo, setDetailSellerInfo] = useState<{
@@ -116,16 +108,6 @@ const ProductsPage = () => {
       .select("*")
       .order("created_at", { ascending: false });
     setSellerProducts((data as SellerProduct[]) ?? []);
-
-    // Fetch micro-godown assignment counts per product
-    const { data: links } = await supabase
-      .from("seller_product_micro_godowns")
-      .select("seller_product_id");
-    const counts: Record<string, number> = {};
-    (links ?? []).forEach((l: any) => {
-      counts[l.seller_product_id] = (counts[l.seller_product_id] ?? 0) + 1;
-    });
-    setMicroGodownCounts(counts);
   };
 
   const fetchSellerProfiles = async () => {
@@ -138,21 +120,11 @@ const ProductsPage = () => {
     setCategories((data as Category[]) ?? []);
   };
 
-  const fetchMicroGodownTotal = async () => {
-    const { count } = await supabase
-      .from("godowns")
-      .select("id", { count: "exact", head: true })
-      .eq("godown_type", "micro")
-      .eq("is_active", true);
-    setMicroGodownTotal(count ?? 0);
-  };
-
   useEffect(() => {
     fetchProducts();
     fetchSellerProducts();
     fetchSellerProfiles();
     fetchCategories();
-    fetchMicroGodownTotal();
   }, []);
 
   // Get category margin percentage
@@ -529,14 +501,6 @@ const ProductsPage = () => {
           <TabsTrigger value="sellers">
             Seller Products
             <Badge variant="secondary" className="ml-2">{sellerProducts.length}</Badge>
-            {(() => {
-              const unassignedCount = sellerProducts.filter(
-                (p) => p.is_grocery && !p.assign_to_all_micro_godowns && (microGodownCounts[p.id] ?? 0) === 0
-              ).length;
-              return unassignedCount > 0 ? (
-                <Badge className="ml-1 bg-destructive text-destructive-foreground border-0">{unassignedCount}</Badge>
-              ) : null;
-            })()}
           </TabsTrigger>
         </TabsList>
 
@@ -652,7 +616,7 @@ const ProductsPage = () => {
         {/* SELLER PRODUCTS TAB */}
         <TabsContent value="sellers">
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input placeholder="Search seller products..." value={sellerSearch} onChange={(e) => setSellerSearch(e.target.value)} className="pl-9 w-full sm:w-48 h-9" />
@@ -665,12 +629,7 @@ const ProductsPage = () => {
                 <option value="">All Sellers</option>
                 {sellerProfiles.map(s => <option key={s.user_id} value={s.user_id}>{s.company_name || s.full_name || s.user_id.slice(0, 8)}</option>)}
               </select>
-              <select className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm" value={sellerGroceryFilter} onChange={(e) => setSellerGroceryFilter(e.target.value as any)}>
-                <option value="all">All Products</option>
-                <option value="grocery">Grocery only</option>
-                <option value="non_grocery">Non-grocery</option>
-                <option value="unassigned_grocery">Unassigned grocery</option>
-              </select>
+              <p className="text-sm text-muted-foreground hidden sm:block">Approve to make visible to customers.</p>
             </div>
             <Button variant="outline" onClick={() => navigate("/selling-partner/dashboard")}>
               <Store className="mr-2 h-4 w-4" /> Seller Dashboard
@@ -678,184 +637,100 @@ const ProductsPage = () => {
             </Button>
           </div>
 
-          {(() => {
-            const isUnassignedGrocery = (p: SellerProduct) =>
-              !!p.is_grocery && !p.assign_to_all_micro_godowns && (microGodownCounts[p.id] ?? 0) === 0;
-
-            const filterFn = (p: SellerProduct) => {
-              if (sellerCategoryFilter && p.category !== sellerCategoryFilter) return false;
-              if (sellerFilter && p.seller_id !== sellerFilter) return false;
-              if (sellerSearch && !p.name.toLowerCase().includes(sellerSearch.toLowerCase())) return false;
-              if (sellerGroceryFilter === "grocery" && !p.is_grocery) return false;
-              if (sellerGroceryFilter === "non_grocery" && p.is_grocery) return false;
-              if (sellerGroceryFilter === "unassigned_grocery") {
-                if (!isUnassignedGrocery(p)) return false;
-              }
-              return true;
-            };
-            const filtered = sellerProducts.filter(filterFn).sort((a, b) => {
-              // Auto-sort unassigned grocery rows to the top
-              const aU = isUnassignedGrocery(a) ? 0 : 1;
-              const bU = isUnassignedGrocery(b) ? 0 : 1;
-              return aU - bU;
-            });
-
-            const unassignedTotalCount = sellerProducts.filter(isUnassignedGrocery).length;
-
-            const renderGodownBadge = (p: SellerProduct) => {
-              if (!p.is_grocery) {
-                return <span className="text-xs text-muted-foreground">—</span>;
-              }
-              if (p.assign_to_all_micro_godowns) {
-                return <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-0 gap-1"><Warehouse className="h-3 w-3" /> All ({microGodownTotal})</Badge>;
-              }
-              const count = microGodownCounts[p.id] ?? 0;
-              if (count === 0) {
-                return <Badge variant="outline" className="gap-1 border-yellow-400 text-yellow-700 dark:text-yellow-300"><Warehouse className="h-3 w-3" /> Unassigned</Badge>;
-              }
-              return <Badge variant="secondary" className="gap-1"><Warehouse className="h-3 w-3" /> {count} godown{count > 1 ? "s" : ""}</Badge>;
-            };
-
-            return (
-              <>
-                {unassignedTotalCount > 0 && (
-                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-yellow-400/60 bg-yellow-50 dark:bg-yellow-900/20 p-3">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      ⚠️ <strong>{unassignedTotalCount}</strong> grocery product{unassignedTotalCount > 1 ? "s are" : " is"} unassigned and invisible to customers. Assign them to micro godowns to make them visible.
-                    </p>
-                    {sellerGroceryFilter !== "unassigned_grocery" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-yellow-500 text-yellow-800 dark:text-yellow-200 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 shrink-0"
-                        onClick={() => setSellerGroceryFilter("unassigned_grocery")}
-                      >
-                        Show unassigned
-                      </Button>
-                    )}
+          {/* Mobile card view */}
+          <div className="block md:hidden space-y-3">
+            {sellerProducts.filter(p => (!sellerCategoryFilter || p.category === sellerCategoryFilter) && (!sellerFilter || p.seller_id === sellerFilter) && (!sellerSearch || p.name.toLowerCase().includes(sellerSearch.toLowerCase()))).map((p) => (
+              <div key={p.id} className="rounded-lg border bg-card p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">{p.category ?? "No category"}</p>
                   </div>
-                )}
-                {/* Mobile card view */}
-                <div className="block md:hidden space-y-3">
-                  {filtered.map((p) => (
-                    <div key={p.id} className={`rounded-lg border p-3 space-y-2 ${isUnassignedGrocery(p) ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-400/60" : "bg-card"}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{p.name}</p>
-                          <p className="text-xs text-muted-foreground">{p.category ?? "No category"}</p>
-                        </div>
-                        {p.is_approved
-                          ? <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0 gap-1 text-[10px] shrink-0"><CheckCircle className="h-3 w-3" /> Approved</Badge>
-                          : <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-0 gap-1 text-[10px] shrink-0"><XCircle className="h-3 w-3" /> Pending</Badge>}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div><span className="text-muted-foreground">Purchase:</span> ₹{p.purchase_rate}</div>
-                        <div><span className="text-muted-foreground">Price:</span> ₹{p.price}</div>
-                        <div><span className="text-muted-foreground">MRP:</span> ₹{p.mrp}</div>
-                        <div><span className="text-muted-foreground">Margin:</span> <span className="text-primary font-medium">{getEffectiveMargin(p).toFixed(1)}%</span></div>
-                        <div><span className="text-muted-foreground">Discount:</span> ₹{p.discount_rate}</div>
-                      </div>
-                      {p.is_grocery && (
-                        <div className="flex items-center justify-between gap-2 pt-1 border-t">
-                          <span className="text-xs text-muted-foreground">Micro Godown:</span>
-                          <div className="flex items-center gap-2">
-                            {renderGodownBadge(p)}
-                            <Button variant="outline" size="sm" className="h-7" onClick={() => setAssignDialog({ id: p.id, name: p.name })}>
-                              <Warehouse className="h-3.5 w-3.5 mr-1" /> Assign
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex gap-1 pt-1 border-t">
+                  {p.is_approved
+                    ? <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0 gap-1 text-[10px] shrink-0"><CheckCircle className="h-3 w-3" /> Approved</Badge>
+                    : <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-0 gap-1 text-[10px] shrink-0"><XCircle className="h-3 w-3" /> Pending</Badge>}
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div><span className="text-muted-foreground">Purchase:</span> ₹{p.purchase_rate}</div>
+                  <div><span className="text-muted-foreground">Price:</span> ₹{p.price}</div>
+                  <div><span className="text-muted-foreground">MRP:</span> ₹{p.mrp}</div>
+                  <div><span className="text-muted-foreground">Margin:</span> <span className="text-primary font-medium">{getEffectiveMargin(p).toFixed(1)}%</span></div>
+                  <div><span className="text-muted-foreground">Discount:</span> ₹{p.discount_rate}</div>
+                </div>
+                <div className="flex gap-1 pt-1 border-t">
+                  <Button variant="ghost" size="sm" onClick={async () => { setDetailProduct(p); setDetailType("seller"); const { data } = await supabase.from("profiles").select("company_name, business_address, business_city, business_state, business_pincode, business_phone, business_email, full_name, gst_number").eq("user_id", p.seller_id).single(); setDetailSellerInfo(data); }}><Eye className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => openSellerEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleSellerDelete(p.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                  <Button variant={p.is_approved ? "outline" : "default"} size="sm" onClick={() => toggleSellerApproval(p)} className="ml-auto">
+                    {p.is_approved ? "Revoke" : "Approve"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {sellerProducts.length === 0 && <p className="py-8 text-center text-muted-foreground">No seller products found.</p>}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="admin-table-wrap hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Purchase</TableHead>
+                  <TableHead>Margin %</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>MRP</TableHead>
+                  <TableHead>Discount</TableHead>
+                  <TableHead>Approval</TableHead>
+                  <TableHead className="w-28">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sellerProducts.filter(p => (!sellerCategoryFilter || p.category === sellerCategoryFilter) && (!sellerFilter || p.seller_id === sellerFilter) && (!sellerSearch || p.name.toLowerCase().includes(sellerSearch.toLowerCase()))).map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell>{p.category ?? "—"}</TableCell>
+                    <TableCell>₹{p.purchase_rate}</TableCell>
+                    <TableCell>
+                      <span className="text-primary font-medium">{getEffectiveMargin(p).toFixed(1)}%</span>
+                    </TableCell>
+                    <TableCell>₹{p.price}</TableCell>
+                    <TableCell>₹{p.mrp}</TableCell>
+                    <TableCell>₹{p.discount_rate}</TableCell>
+                    <TableCell>
+                      {p.is_approved
+                        ? <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0 gap-1"><CheckCircle className="h-3 w-3" /> Approved</Badge>
+                        : <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-0 gap-1"><XCircle className="h-3 w-3" /> Pending</Badge>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
                         <Button variant="ghost" size="sm" onClick={async () => { setDetailProduct(p); setDetailType("seller"); const { data } = await supabase.from("profiles").select("company_name, business_address, business_city, business_state, business_pincode, business_phone, business_email, full_name, gst_number").eq("user_id", p.seller_id).single(); setDetailSellerInfo(data); }}><Eye className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => openSellerEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleSellerDelete(p.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-                        <Button variant={p.is_approved ? "outline" : "default"} size="sm" onClick={() => toggleSellerApproval(p)} className="ml-auto">
+                        <Button variant="ghost" size="sm" onClick={() => openSellerEdit(p)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleSellerDelete(p.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant={p.is_approved ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => toggleSellerApproval(p)}
+                        >
                           {p.is_approved ? "Revoke" : "Approve"}
                         </Button>
                       </div>
-                    </div>
-                  ))}
-                  {filtered.length === 0 && <p className="py-8 text-center text-muted-foreground">No seller products found.</p>}
-                </div>
-
-                {/* Desktop table view */}
-                <div className="admin-table-wrap hidden md:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Purchase</TableHead>
-                        <TableHead>Margin %</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>MRP</TableHead>
-                        <TableHead>Micro Godown</TableHead>
-                        <TableHead>Approval</TableHead>
-                        <TableHead className="w-32">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filtered.map((p) => (
-                        <TableRow key={p.id} className={isUnassignedGrocery(p) ? "bg-yellow-50 dark:bg-yellow-900/20" : undefined}>
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell>{p.category ?? "—"}</TableCell>
-                          <TableCell>₹{p.purchase_rate}</TableCell>
-                          <TableCell>
-                            <span className="text-primary font-medium">{getEffectiveMargin(p).toFixed(1)}%</span>
-                          </TableCell>
-                          <TableCell>₹{p.price}</TableCell>
-                          <TableCell>₹{p.mrp}</TableCell>
-                          <TableCell>{renderGodownBadge(p)}</TableCell>
-                          <TableCell>
-                            {p.is_approved
-                              ? <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-0 gap-1"><CheckCircle className="h-3 w-3" /> Approved</Badge>
-                              : <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border-0 gap-1"><XCircle className="h-3 w-3" /> Pending</Badge>}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1 flex-wrap">
-                              <Button variant="ghost" size="sm" onClick={async () => { setDetailProduct(p); setDetailType("seller"); const { data } = await supabase.from("profiles").select("company_name, business_address, business_city, business_state, business_pincode, business_phone, business_email, full_name, gst_number").eq("user_id", p.seller_id).single(); setDetailSellerInfo(data); }}><Eye className="h-3.5 w-3.5" /></Button>
-                              <Button variant="ghost" size="sm" onClick={() => openSellerEdit(p)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              {p.is_grocery && (
-                                <Button variant="ghost" size="sm" onClick={() => setAssignDialog({ id: p.id, name: p.name })} title="Assign micro godowns">
-                                  <Warehouse className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="sm" onClick={() => handleSellerDelete(p.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant={p.is_approved ? "outline" : "default"}
-                                size="sm"
-                                onClick={() => toggleSellerApproval(p)}
-                              >
-                                {p.is_approved ? "Revoke" : "Approve"}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {filtered.length === 0 && (
-                        <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No seller products found.</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            );
-          })()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {sellerProducts.length === 0 && (
+                  <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">No seller products found.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </TabsContent>
       </Tabs>
-
-      <MicroGodownAssignDialog
-        open={!!assignDialog}
-        onOpenChange={(v) => { if (!v) setAssignDialog(null); }}
-        productId={assignDialog?.id ?? null}
-        productName={assignDialog?.name ?? ""}
-        onSaved={fetchSellerProducts}
-      />
 
       {/* Product Detail Dialog */}
       <Dialog open={!!detailProduct} onOpenChange={(v) => { if (!v) { setDetailProduct(null); setDetailSellerInfo(null); } }}>

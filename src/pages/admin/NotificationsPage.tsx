@@ -43,7 +43,6 @@ const NotificationsPage = () => {
   const { session } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [localBodies, setLocalBodies] = useState<LocalBody[]>([]);
-  const [viewCounts, setViewCounts] = useState<Record<string, { delivered: number; read: number; clicked: number }>>({});
   const [editing, setEditing] = useState<Partial<Notification> | null>(null);
   const [analyticsFor, setAnalyticsFor] = useState<Notification | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
@@ -52,21 +51,12 @@ const NotificationsPage = () => {
   const [filterWard, setFilterWard] = useState("all");
 
   const fetchData = async () => {
-    const [{ data: notifs }, { data: lbs }, { data: reads }] = await Promise.all([
+    const [{ data: notifs }, { data: lbs }] = await Promise.all([
       supabase.from("notifications").select("*").order("created_at", { ascending: false }),
       supabase.from("locations_local_bodies").select("id, name, body_type").eq("is_active", true).order("name"),
-      supabase.from("notification_reads").select("notification_id, read_at, clicked_at"),
     ]);
     setNotifications((notifs ?? []) as Notification[]);
     setLocalBodies(lbs ?? []);
-    const counts: Record<string, { delivered: number; read: number; clicked: number }> = {};
-    for (const r of reads ?? []) {
-      const c = (counts[r.notification_id] = counts[r.notification_id] || { delivered: 0, read: 0, clicked: 0 });
-      c.delivered++;
-      if (r.read_at) c.read++;
-      if (r.clicked_at) c.clicked++;
-    }
-    setViewCounts(counts);
   };
 
   useEffect(() => {
@@ -257,35 +247,6 @@ const NotificationsPage = () => {
     return acc;
   }, {} as Record<string, any[]>);
 
-  // Group users by role for the role-based drilldown
-  const groupedUsersByRole: Record<string, any[]> = filteredUsers.reduce((acc: Record<string, any[]>, u: any) => {
-    const key = u.role_name || "No Role";
-    (acc[key] = acc[key] || []).push(u);
-    return acc;
-  }, {} as Record<string, any[]>);
-
-  const shareRoleUsersToWhatsApp = (role: string, users: any[]) => {
-    const d = users.filter((u) => u.delivered_at).length;
-    const r = users.filter((u) => u.read_at).length;
-    const c = users.filter((u) => u.clicked_at).length;
-    const lines = [
-      `*${analyticsFor?.title || "Notification"}*`,
-      `👤 *${role}* — Per-User`,
-      ``,
-      `Users: ${users.length}  |  Delivered: ${d}  |  Read: ${r}  |  Clicked: ${c}`,
-      ``,
-      `*Users:*`,
-      ...[...users]
-        .sort((a, b) => String(a.local_body_name || "").localeCompare(String(b.local_body_name || "")))
-        .map(
-          (u) =>
-            `• ${u.full_name || "-"} (${u.mobile_number || "-"}) ${u.local_body_name || "-"} W${u.ward_number ?? "-"} — ${u.read_at ? "✅Read" : u.delivered_at ? "📨Delivered" : "—"}${u.clicked_at ? " 🔗" : ""}`
-        ),
-    ];
-    const text = encodeURIComponent(lines.join("\n"));
-    window.open(`https://wa.me/?text=${text}`, "_blank");
-  };
-
   const shareUsersToWhatsApp = (panchayath: string, users: any[]) => {
     const d = users.filter((u) => u.delivered_at).length;
     const r = users.filter((u) => u.read_at).length;
@@ -349,7 +310,6 @@ const NotificationsPage = () => {
                   <TableHead>Title</TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Views</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -357,14 +317,12 @@ const NotificationsPage = () => {
               <TableBody>
                 {notifications.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       No notifications yet
                     </TableCell>
                   </TableRow>
                 ) : (
-                  notifications.map((n) => {
-                    const c = viewCounts[n.id] || { delivered: 0, read: 0, clicked: 0 };
-                    return (
+                  notifications.map((n) => (
                     <TableRow key={n.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -383,18 +341,6 @@ const NotificationsPage = () => {
                           {n.is_active ? "Active" : "Inactive"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-center">
-                        <button
-                          onClick={() => openAnalytics(n)}
-                          className="inline-flex flex-col items-center gap-0.5 text-xs hover:text-primary transition-colors"
-                          title="Delivered / Read / Clicked"
-                        >
-                          <span className="font-semibold text-sm">{c.read}</span>
-                          <span className="text-muted-foreground">
-                            {c.delivered}d · {c.clicked}c
-                          </span>
-                        </button>
-                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(n.created_at).toLocaleDateString()}
                       </TableCell>
@@ -410,8 +356,7 @@ const NotificationsPage = () => {
                         </Button>
                       </TableCell>
                     </TableRow>
-                    );
-                  })
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -538,26 +483,25 @@ const NotificationsPage = () => {
                 <Card><CardHeader className="pb-2 px-3 sm:px-6"><CardTitle className="text-xs sm:text-sm">Clicked</CardTitle></CardHeader><CardContent className="px-3 sm:px-6"><p className="text-xl sm:text-2xl font-bold text-emerald-600">{analytics.totals.clicked}</p></CardContent></Card>
               </div>
 
-              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Select value={filterPanchayath} onValueChange={setFilterPanchayath}>
-                  <SelectTrigger className="sm:flex-1 sm:min-w-[140px] h-9 text-xs sm:text-sm"><SelectValue placeholder="Panchayath" /></SelectTrigger>
+                  <SelectTrigger className="flex-1 min-w-[140px] h-9"><SelectValue placeholder="Panchayath" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Panchayaths</SelectItem>
                     {uniquePanchayaths.map((p: any) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <Select value={filterWard} onValueChange={setFilterWard}>
-                  <SelectTrigger className="sm:w-28 h-9 text-xs sm:text-sm"><SelectValue placeholder="Ward" /></SelectTrigger>
+                  <SelectTrigger className="w-28 h-9"><SelectValue placeholder="Ward" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Wards</SelectItem>
                     {uniqueWards.map((w: any) => <SelectItem key={w} value={String(w)}>Ward {w}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="outline" onClick={exportGroupsCSV} className="h-9 col-span-2 sm:col-span-1">
-                  <Download className="h-4 w-4 mr-1" /> Export
+                <Button size="sm" variant="outline" onClick={exportGroupsCSV} className="h-9">
+                  <Download className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Export</span>
                 </Button>
               </div>
-
 
               <Accordion type="multiple" className="w-full">
                 <AccordionItem value="by-panchayath">
@@ -575,8 +519,8 @@ const NotificationsPage = () => {
                           return (
                             <AccordionItem key={panchayath} value={panchayath} className="border rounded-md px-3">
                               <AccordionTrigger className="hover:no-underline py-3">
-                                <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 pr-2 min-w-0 text-left">
-                                  <span className="font-medium text-sm sm:text-base truncate">{panchayath}</span>
+                                <div className="flex-1 flex items-center justify-between gap-2 pr-2 min-w-0">
+                                  <span className="font-medium text-sm sm:text-base truncate text-left">{panchayath}</span>
                                   <div className="flex items-center gap-1.5 text-xs shrink-0">
                                     <Badge variant="outline" className="font-normal">D {subtotal.d}</Badge>
                                     <Badge variant="outline" className="font-normal text-primary border-primary/40">R {subtotal.r}</Badge>
@@ -595,31 +539,7 @@ const NotificationsPage = () => {
                                     <MessageCircle className="h-3.5 w-3.5 mr-1" /> Share to WhatsApp
                                   </Button>
                                 </div>
-                                {/* Mobile: card list */}
-                                <div className="sm:hidden space-y-2">
-                                  {[...groups]
-                                    .sort((a: any, b: any) => (Number(a.ward_number) || 0) - (Number(b.ward_number) || 0))
-                                    .map((g: any, i: number) => (
-                                      <div key={`m-${panchayath}-${i}`} className="border rounded-md p-2.5 text-sm flex items-center justify-between gap-2">
-                                        <span className="font-medium">Ward {g.ward_number ?? "-"}</span>
-                                        <div className="flex items-center gap-1.5 text-xs shrink-0">
-                                          <Badge variant="outline" className="font-normal">D {g.delivered}</Badge>
-                                          <Badge variant="outline" className="font-normal text-primary border-primary/40">R {g.read}</Badge>
-                                          <Badge variant="outline" className="font-normal text-emerald-600 border-emerald-600/40">C {g.clicked}</Badge>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  <div className="border rounded-md p-2.5 text-sm flex items-center justify-between gap-2 bg-muted/40">
-                                    <span className="font-semibold text-xs">Subtotal</span>
-                                    <div className="flex items-center gap-1.5 text-xs shrink-0">
-                                      <Badge variant="outline" className="font-semibold">D {subtotal.d}</Badge>
-                                      <Badge variant="outline" className="font-semibold text-primary border-primary/40">R {subtotal.r}</Badge>
-                                      <Badge variant="outline" className="font-semibold text-emerald-600 border-emerald-600/40">C {subtotal.c}</Badge>
-                                    </div>
-                                  </div>
-                                </div>
-                                {/* Desktop: table */}
-                                <div className="hidden sm:block overflow-x-auto">
+                                <div className="overflow-x-auto">
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
@@ -651,114 +571,8 @@ const NotificationsPage = () => {
                                 </div>
                               </AccordionContent>
                             </AccordionItem>
-
                           );
                         })}
-                      </Accordion>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="by-role">
-                  <AccordionTrigger className="font-semibold">By Role</AccordionTrigger>
-                  <AccordionContent>
-                    {Object.entries(groupedUsersByRole).length === 0 ? (
-                      <p className="text-center text-muted-foreground py-4 text-sm">No users</p>
-                    ) : (
-                      <Accordion type="multiple" className="w-full space-y-2">
-                        {(Object.entries(groupedUsersByRole) as [string, any[]][])
-                          .sort(([a], [b]) => a.localeCompare(b))
-                          .map(([role, users]) => {
-                            const d = users.filter((u) => u.delivered_at).length;
-                            const r = users.filter((u) => u.read_at).length;
-                            const c = users.filter((u) => u.clicked_at).length;
-                            return (
-                              <AccordionItem key={role} value={role} className="border rounded-md px-3">
-                                <AccordionTrigger className="hover:no-underline py-3">
-                                  <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 pr-2 min-w-0 text-left">
-                                    <span className="font-medium text-sm sm:text-base truncate">
-                                      {role} <span className="text-xs text-muted-foreground">({users.length})</span>
-                                    </span>
-                                    <div className="flex items-center gap-1.5 text-xs shrink-0">
-                                      <Badge variant="outline" className="font-normal">D {d}</Badge>
-                                      <Badge variant="outline" className="font-normal text-primary border-primary/40">R {r}</Badge>
-                                      <Badge variant="outline" className="font-normal text-emerald-600 border-emerald-600/40">C {c}</Badge>
-                                    </div>
-                                  </div>
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                  <div className="flex flex-wrap justify-end gap-2 mb-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8"
-                                      onClick={() => exportUsersCSV(users, `${role.replace(/[^a-z0-9]+/gi, "_")}_role_users`)}
-                                    >
-                                      <Download className="h-3.5 w-3.5 mr-1" /> Export
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-8 text-emerald-600 border-emerald-600/40 hover:bg-emerald-50 hover:text-emerald-700"
-                                      onClick={() => shareRoleUsersToWhatsApp(role, users)}
-                                    >
-                                      <MessageCircle className="h-3.5 w-3.5 mr-1" /> Share to WhatsApp
-                                    </Button>
-                                  </div>
-                                  {/* Mobile: card list */}
-                                  <div className="sm:hidden space-y-2">
-                                    {[...users]
-                                      .sort((a, b) => String(a.local_body_name || "").localeCompare(String(b.local_body_name || "")))
-                                      .map((u: any) => (
-                                        <div key={u.user_id} className="border rounded-md p-3 text-sm space-y-1">
-                                          <div className="flex items-center justify-between gap-2">
-                                            <p className="font-medium truncate">{u.full_name || "-"}</p>
-                                            <span className="text-xs text-muted-foreground shrink-0">{u.mobile_number || "-"}</span>
-                                          </div>
-                                          <p className="text-xs text-muted-foreground truncate">{u.local_body_name || "-"} · W{u.ward_number ?? "-"}</p>
-                                          <div className="grid grid-cols-3 gap-1 text-[11px] pt-1">
-                                            <div><span className="text-muted-foreground">D:</span> {u.delivered_at ? new Date(u.delivered_at).toLocaleDateString() : "-"}</div>
-                                            <div><span className="text-muted-foreground">R:</span> {u.read_at ? new Date(u.read_at).toLocaleDateString() : "-"}</div>
-                                            <div><span className="text-muted-foreground">C:</span> {u.clicked_at ? new Date(u.clicked_at).toLocaleDateString() : "-"}</div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                  </div>
-                                  {/* Desktop: table */}
-                                  <div className="hidden sm:block overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Name</TableHead>
-                                          <TableHead>Mobile</TableHead>
-                                          <TableHead>Panchayath</TableHead>
-                                          <TableHead className="w-20">Ward</TableHead>
-                                          <TableHead>Delivered</TableHead>
-                                          <TableHead>Read</TableHead>
-                                          <TableHead>Clicked</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {[...users]
-                                          .sort((a, b) => String(a.local_body_name || "").localeCompare(String(b.local_body_name || "")))
-                                          .map((u: any) => (
-                                            <TableRow key={u.user_id}>
-                                              <TableCell>{u.full_name || "-"}</TableCell>
-                                              <TableCell className="text-xs">{u.mobile_number || "-"}</TableCell>
-                                              <TableCell className="text-xs">{u.local_body_name || "-"}</TableCell>
-                                              <TableCell>Ward {u.ward_number ?? "-"}</TableCell>
-                                              <TableCell className="text-xs">{u.delivered_at ? new Date(u.delivered_at).toLocaleString() : "-"}</TableCell>
-                                              <TableCell className="text-xs">{u.read_at ? new Date(u.read_at).toLocaleString() : "-"}</TableCell>
-                                              <TableCell className="text-xs">{u.clicked_at ? new Date(u.clicked_at).toLocaleString() : "-"}</TableCell>
-                                            </TableRow>
-                                          ))}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
-                                </AccordionContent>
-                              </AccordionItem>
-                            );
-                          })}
                       </Accordion>
                     )}
                   </AccordionContent>
@@ -785,8 +599,8 @@ const NotificationsPage = () => {
                             return (
                               <AccordionItem key={panchayath} value={panchayath} className="border rounded-md px-3">
                                 <AccordionTrigger className="hover:no-underline py-3">
-                                  <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 pr-2 min-w-0 text-left">
-                                    <span className="font-medium text-sm sm:text-base truncate">
+                                  <div className="flex-1 flex items-center justify-between gap-2 pr-2 min-w-0">
+                                    <span className="font-medium text-sm sm:text-base truncate text-left">
                                       {panchayath} <span className="text-xs text-muted-foreground">({users.length})</span>
                                     </span>
                                     <div className="flex items-center gap-1.5 text-xs shrink-0">

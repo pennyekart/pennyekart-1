@@ -41,7 +41,6 @@ import PennyPrimePage from "./pages/admin/PennyPrimePage";
 import PlatformMarginPage from "./pages/admin/PlatformMarginPage";
 import ChatbotSettingsPage from "./pages/admin/ChatbotSettingsPage";
 import NotificationsPage from "./pages/admin/NotificationsPage";
-import ScratchRewardsPage from "./pages/admin/ScratchRewardsPage";
 import NotificationPopup from "./components/NotificationPopup";
 import PennyPrimePublic from "./pages/PennyPrime";
 import DeliveryStaffSignup from "./pages/delivery-staff/Signup";
@@ -97,9 +96,8 @@ const AppRoutes = () => {
       <Route path="/admin/wallets" element={<ProtectedRoute requirePermission="read_users"><WalletManagementPage /></ProtectedRoute>} />
       <Route path="/admin/penny-prime" element={<ProtectedRoute requirePermission="read_orders"><PennyPrimePage /></ProtectedRoute>} />
       <Route path="/admin/platform-margin" element={<ProtectedRoute requirePermission="read_products"><PlatformMarginPage /></ProtectedRoute>} />
-      <Route path="/admin/chatbot" element={<ProtectedRoute requirePermission="read_chatbot"><ChatbotSettingsPage /></ProtectedRoute>} />
-      <Route path="/admin/notifications" element={<ProtectedRoute requirePermission="read_notifications"><NotificationsPage /></ProtectedRoute>} />
-      <Route path="/admin/scratch-rewards" element={<ProtectedRoute requirePermission="read_scratch_rewards"><ScratchRewardsPage /></ProtectedRoute>} />
+      <Route path="/admin/chatbot" element={<ProtectedRoute requirePermission="read_settings"><ChatbotSettingsPage /></ProtectedRoute>} />
+      <Route path="/admin/notifications" element={<ProtectedRoute requirePermission="read_settings"><NotificationsPage /></ProtectedRoute>} />
       <Route path="/penny-prime" element={<PennyPrimePublic />} />
 
       {/* Delivery Staff */}

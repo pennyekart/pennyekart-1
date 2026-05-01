@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Star, Clock, Coins } from "lucide-react";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/hooks/useAuth";
 
 interface CategoryProduct {
   id: string;
@@ -17,23 +16,7 @@ interface CategoryProduct {
   source: "own" | "seller";
 }
 
-const fetchCategoryProducts = async (
-  categoryName: string,
-  localBodyId: string | null | undefined,
-  wardNumber: number | null | undefined,
-): Promise<CategoryProduct[]> => {
-  // Resolve customer's micro godowns for grocery seller-product visibility
-  let microGodownIds: string[] = [];
-  if (localBodyId && wardNumber) {
-    const { data: microRows } = await supabase
-      .from("godown_wards")
-      .select("godown_id, godowns!inner(godown_type)")
-      .eq("local_body_id", localBodyId)
-      .eq("ward_number", wardNumber)
-      .eq("godowns.godown_type", "micro");
-    microGodownIds = [...new Set((microRows ?? []).map(r => r.godown_id))];
-  }
-
+const fetchCategoryProducts = async (categoryName: string): Promise<CategoryProduct[]> => {
   const [ownRes, sellerRes] = await Promise.all([
     supabase
       .from("products")
@@ -43,7 +26,7 @@ const fetchCategoryProducts = async (
       .or(`category.eq.${categoryName},section.eq.${categoryName}`),
     supabase
       .from("seller_products")
-      .select("id, name, price, mrp, image_url, coming_soon, wallet_points, category, stock, is_grocery, assign_to_all_micro_godowns")
+      .select("id, name, price, mrp, image_url, coming_soon, wallet_points, category, stock")
       .eq("is_active", true)
       .eq("is_approved", true)
       .eq("coming_soon", false)
@@ -51,31 +34,9 @@ const fetchCategoryProducts = async (
       .eq("category", categoryName),
   ]);
 
-  // Filter seller products by micro-godown visibility (grocery items only)
-  let sellerVisible = (sellerRes.data || []) as any[];
-  if (sellerVisible.length) {
-    const groceryNeedingCheck = sellerVisible.filter(
-      p => p.is_grocery && !p.assign_to_all_micro_godowns
-    );
-    let linkedIds = new Set<string>();
-    if (groceryNeedingCheck.length && microGodownIds.length) {
-      const { data: linkRows } = await supabase
-        .from("seller_product_micro_godowns")
-        .select("seller_product_id")
-        .in("seller_product_id", groceryNeedingCheck.map(p => p.id))
-        .in("godown_id", microGodownIds);
-      linkedIds = new Set((linkRows ?? []).map(r => r.seller_product_id));
-    }
-    sellerVisible = sellerVisible.filter(p => {
-      if (!p.is_grocery) return true;
-      if (p.assign_to_all_micro_godowns) return true;
-      return linkedIds.has(p.id);
-    });
-  }
-
   const products: CategoryProduct[] = [];
   ownRes.data?.forEach(p => products.push({ ...p, source: "own" }));
-  sellerVisible.forEach(p => products.push({ ...p, source: "seller" }));
+  sellerRes.data?.forEach(p => products.push({ ...p, source: "seller" }));
 
   // Sort: available first, coming_soon last
   return products.sort((a, b) => {
@@ -88,12 +49,11 @@ const fetchCategoryProducts = async (
 const CategoryProducts = () => {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
   const decodedName = decodeURIComponent(name || "");
 
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ["category-products", decodedName, profile?.local_body_id, profile?.ward_number],
-    queryFn: () => fetchCategoryProducts(decodedName, profile?.local_body_id, profile?.ward_number),
+    queryKey: ["category-products", decodedName],
+    queryFn: () => fetchCategoryProducts(decodedName),
     enabled: !!decodedName,
     staleTime: 5 * 60 * 1000,
   });

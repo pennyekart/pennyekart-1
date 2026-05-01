@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Minus, Plus, Trash2, ShieldCheck, Clock, MapPin, ExternalLink, UserCog } from "lucide-react";
+import { ArrowLeft, Minus, Plus, Trash2, ShieldCheck, Clock, MapPin, Share2, LocateFixed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/hooks/useCart";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,11 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import WalletRewardPopup from "@/components/WalletRewardPopup";
 import { useDeliveryCharge } from "@/hooks/useDeliveryCharge";
-import LocationPicker, { PickedLocation } from "@/components/LocationPicker";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -20,14 +21,16 @@ const Cart = () => {
   const { items, updateQuantity, removeItem, clearCart, totalPrice, totalItems } = useCart();
   const { user } = useAuth();
   const [showPayment, setShowPayment] = useState(false);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [savedAddress, setSavedAddress] = useState<string | null>(null);
+  const [addressLoading, setAddressLoading] = useState(false);
   const [savedLat, setSavedLat] = useState<number | null>(null);
   const [savedLng, setSavedLng] = useState<number | null>(null);
+  const [locatingGps, setLocatingGps] = useState(false);
 
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; collabId?: string } | null>(null);
@@ -305,35 +308,33 @@ const Cart = () => {
       return;
     }
 
-    // Show map picker if no saved location, otherwise go to payment
-    if (!savedAddress || !savedLat || !savedLng) {
-      setShowLocationPicker(true);
+    // Show address dialog if no saved address, otherwise go to payment
+    if (!savedAddress) {
+      setShowAddressDialog(true);
     } else {
       setShowPayment(true);
     }
   };
 
-  const handlePickerSave = async (loc: PickedLocation) => {
-    if (!user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        business_address: loc.address,
-        latitude: loc.lat,
-        longitude: loc.lng,
-      } as any)
-      .eq("user_id", user.id);
-    if (error) {
-      toast.error("Failed to save location");
+  const handleSaveAddress = async () => {
+    if (!deliveryAddress.trim()) {
+      toast.error("Please enter a delivery address");
       return;
     }
-    setSavedAddress(loc.address);
-    setDeliveryAddress(loc.address);
-    setSavedLat(loc.lat);
-    setSavedLng(loc.lng);
-    toast.success("Location saved");
-    // After picking, jump straight to payment
-    setShowPayment(true);
+    setAddressLoading(true);
+    try {
+      await supabase
+        .from("profiles")
+        .update({ business_address: deliveryAddress.trim() } as any)
+        .eq("user_id", user!.id);
+      setSavedAddress(deliveryAddress.trim());
+      setShowAddressDialog(false);
+      setShowPayment(true);
+    } catch {
+      toast.error("Failed to save address");
+    } finally {
+      setAddressLoading(false);
+    }
   };
 
   const handleConfirmOrder = async () => {
@@ -616,74 +617,122 @@ const Cart = () => {
 
           {/* Right: Price Details */}
           <div className="w-full lg:w-80 shrink-0 space-y-4">
-          {/* Delivery Address — synced with Profile › My Delivery Location */}
-            <div className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <MapPin className="h-4 w-4" /> My Delivery Location
-                  </h2>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Same location used in your Profile.
-                  </p>
-                </div>
-                <Button size="sm" onClick={() => setShowLocationPicker(true)}>
-                  {savedAddress ? "Update" : "Add"}
-                </Button>
-              </div>
-
+          {/* Delivery Address */}
+            <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-4 w-4" /> Delivery Address
+              </h2>
               {savedAddress ? (
-                <>
-                  <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
-                    <p className="text-sm">{savedAddress}</p>
-                    {savedLat && savedLng && (
-                      <p className="text-xs text-muted-foreground">
-                        Lat: {savedLat.toFixed(6)}, Lng: {savedLng.toFixed(6)}
-                      </p>
-                    )}
-                  </div>
-                  {savedLat && savedLng && (
-                    <div className="rounded-md overflow-hidden border border-border">
-                      <iframe
-                        title="Delivery location preview"
-                        width="100%"
-                        height="180"
-                        style={{ border: 0 }}
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        src={`https://www.google.com/maps?q=${savedLat},${savedLng}&z=16&output=embed`}
-                      />
-                    </div>
-                  )}
-                  {savedLat && savedLng && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() =>
-                        window.open(`https://www.google.com/maps?q=${savedLat},${savedLng}`, "_blank")
-                      }
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" /> Open in Google Maps
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground border border-dashed border-border rounded-md">
-                  <MapPin className="h-8 w-8 mx-auto mb-1 opacity-40" />
-                  <p className="text-sm">No location saved yet</p>
-                  <p className="text-xs mt-0.5">Add your delivery location on the map.</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-foreground">{savedAddress}</p>
+                  <button
+                    onClick={() => setShowAddressDialog(true)}
+                    className="text-xs font-semibold uppercase text-primary hover:underline shrink-0"
+                  >
+                    Change
+                  </button>
                 </div>
+              ) : (
+                <button
+                  onClick={() => setShowAddressDialog(true)}
+                  className="text-sm text-primary font-medium hover:underline"
+                >
+                  + Add delivery address
+                </button>
+              )}
+              {/* Saved GPS indicator */}
+              {savedLat && savedLng && (
+                <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                  <LocateFixed className="h-3 w-3 text-primary" />
+                  GPS saved: {savedLat.toFixed(5)}, {savedLng.toFixed(5)}
+                </p>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => navigate("/customer/profile?tab=addresses")}
+              {/* Save My Location (GPS) */}
+              <button
+                onClick={async () => {
+                  if (!navigator.geolocation) {
+                    toast.error("Geolocation is not supported by your browser");
+                    return;
+                  }
+                  if (!user) {
+                    toast.error("Please login first");
+                    return;
+                  }
+                  setLocatingGps(true);
+                  navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                      const { latitude, longitude } = position.coords;
+                      await supabase
+                        .from("profiles")
+                        .update({ latitude, longitude } as any)
+                        .eq("user_id", user.id);
+                      setSavedLat(latitude);
+                      setSavedLng(longitude);
+                      setLocatingGps(false);
+                      toast.success("GPS location saved permanently!");
+                    },
+                    () => {
+                      setLocatingGps(false);
+                      toast.error("Unable to get location. Please enable location access.");
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                  );
+                }}
+                disabled={locatingGps}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
               >
-                <UserCog className="h-3.5 w-3.5 mr-1.5" /> Manage in Profile
-              </Button>
+                <LocateFixed className="h-4 w-4" />
+                {locatingGps ? "Getting location..." : savedLat ? "Update GPS Location" : "📍 Save My GPS Location"}
+              </button>
+
+              {/* Share Location via WhatsApp */}
+              <button
+                onClick={() => {
+                  const lat = savedLat;
+                  const lng = savedLng;
+                  if (lat && lng) {
+                    const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+                    const message = encodeURIComponent(
+                      `📍 My delivery location:\n${savedAddress || "Address not set"}\n\n📌 Google Maps: ${googleMapsLink}`
+                    );
+                    window.open(`https://wa.me/?text=${message}`, "_blank");
+                    return;
+                  }
+                  if (!navigator.geolocation) {
+                    toast.error("Geolocation is not supported by your browser");
+                    return;
+                  }
+                  toast.info("Getting your location...");
+                  navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                      const { latitude, longitude } = position.coords;
+                      // Save permanently
+                      if (user) {
+                        await supabase
+                          .from("profiles")
+                          .update({ latitude, longitude } as any)
+                          .eq("user_id", user.id);
+                        setSavedLat(latitude);
+                        setSavedLng(longitude);
+                      }
+                      const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                      const message = encodeURIComponent(
+                        `📍 My delivery location:\n${savedAddress || "Address not set"}\n\n📌 Google Maps: ${googleMapsLink}`
+                      );
+                      window.open(`https://wa.me/?text=${message}`, "_blank");
+                    },
+                    () => {
+                      toast.error("Unable to get location. Please enable location access.");
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                  );
+                }}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-500/20 transition-colors dark:text-green-400"
+              >
+                <Share2 className="h-4 w-4" />
+                Share Location via WhatsApp
+              </button>
             </div>
 
             {/* Coupon Code */}
@@ -835,17 +884,30 @@ const Cart = () => {
         </div>
       </div>
 
-      {/* Delivery Location Picker (Google Map) */}
-      <LocationPicker
-        open={showLocationPicker}
-        onOpenChange={setShowLocationPicker}
-        initialLat={savedLat}
-        initialLng={savedLng}
-        initialAddress={savedAddress}
-        onConfirm={handlePickerSave}
-        title="Set delivery location"
-        description="Pick the exact spot on the map where you want your order delivered."
-      />
+      {/* Delivery Address Dialog */}
+      <Dialog open={showAddressDialog} onOpenChange={setShowAddressDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delivery Address</DialogTitle>
+            <DialogDescription>Enter your delivery address. This will be saved for future orders.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Textarea
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              placeholder="Enter full delivery address (House no, Street, Landmark, Pincode...)"
+              rows={4}
+              className="text-sm"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddressDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveAddress} disabled={addressLoading || !deliveryAddress.trim()}>
+              {addressLoading ? "Saving..." : "Save & Continue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment Method Dialog */}
       <Dialog open={showPayment} onOpenChange={setShowPayment}>
@@ -855,30 +917,13 @@ const Cart = () => {
             <DialogDescription>Choose how you'd like to pay for your order.</DialogDescription>
           </DialogHeader>
           {/* Show delivery address */}
-          <div className="rounded-md border border-border bg-muted/50 p-3 space-y-2">
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-muted-foreground">Delivering to</p>
-                <p className="text-sm text-foreground break-words">{deliveryAddress || "No address set"}</p>
-                {savedLat && savedLng && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {savedLat.toFixed(5)}, {savedLng.toFixed(5)}
-                  </p>
-                )}
-              </div>
+          <div className="rounded-md border border-border bg-muted/50 p-3 flex items-start gap-2">
+            <MapPin className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-muted-foreground">Delivering to</p>
+              <p className="text-sm text-foreground">{deliveryAddress}</p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => { setShowPayment(false); setShowLocationPicker(true); }}
-            >
-              <MapPin className="h-3.5 w-3.5 mr-1.5" /> Update location on map
-            </Button>
           </div>
-
           <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod} className="gap-3 py-2">
             <div className="flex items-center space-x-3 rounded-lg border border-border p-3">
               <RadioGroupItem value="cod" id="cod" />
