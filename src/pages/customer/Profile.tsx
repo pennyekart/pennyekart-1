@@ -17,6 +17,7 @@ import { TodaysWorkSection } from "@/components/customer/TodaysWorkSection";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NotificationDetailDialog from "@/components/NotificationDetailDialog";
+import AddressManager from "@/components/customer/AddressManager";
 
 interface Order {
   id: string;
@@ -464,14 +465,7 @@ const Profile = () => {
 
         {/* Addresses Section */}
         {activeSection === "addresses" && (
-          <Card>
-            <CardContent className="p-8 text-center text-muted-foreground">
-              <MapPin className="h-10 w-10 mx-auto mb-2 opacity-40" />
-              <p className="font-medium">Saved Addresses</p>
-              <p className="text-sm mt-1">No saved addresses yet</p>
-              <Button size="sm" className="mt-4">Add Address</Button>
-            </CardContent>
-          </Card>
+          <AddressManager />
         )}
 
         {/* Wishlist Section */}
