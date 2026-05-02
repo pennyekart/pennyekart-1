@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, LocateFixed, Search, Loader2, ExternalLink, Trash2, Pencil, Plus } from "lucide-react";
+import { MapPin, LocateFixed, Search, Loader2, ExternalLink, Trash2, Pencil, Plus, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -324,11 +324,14 @@ const AddressManager = () => {
   };
 
   const mapStatusLabel = useMemo(() => {
+    const currentSite = typeof window !== "undefined" ? `${window.location.origin}/*` : "this site";
     switch (gmapsStatus) {
       case "loading":
         return "Loading Google Maps…";
       case "no-key":
         return "Google Maps not configured by admin — using basic search.";
+      case "auth-error":
+        return `Google Maps key is blocked for this site. In Google Cloud Console, add this HTTP referrer: ${currentSite}`;
       case "error":
         return "Could not load Google Maps — using basic search.";
       default:
@@ -458,9 +461,18 @@ const AddressManager = () => {
 
           <div className="space-y-4 py-2">
             {mapStatusLabel && (
-              <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5">
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5 break-words">
                 {mapStatusLabel}
               </p>
+            )}
+
+            {gmapsStatus === "auth-error" && (
+              <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>
+                  Pick-on-map will work after the saved Google Maps API key is authorized for this domain.
+                </p>
+              </div>
             )}
 
             {/* Search a place */}
