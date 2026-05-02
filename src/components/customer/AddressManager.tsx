@@ -558,12 +558,18 @@ const AddressManager = () => {
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Pick on map (drag pin)
                 </label>
-                <div
-                  ref={mapDivRef}
-                  className="mt-1 h-56 w-full rounded-md border border-border bg-muted"
-                />
+                <div className="relative mt-1 h-64 w-full overflow-hidden rounded-md border border-border bg-muted sm:h-56">
+                  <div ref={mapDivRef} className="h-full w-full touch-none" />
+                  {!mapActivated && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/95 p-4">
+                      <Button type="button" onClick={activateMapPicker} className="w-full max-w-56 justify-center">
+                        <MapPin className="h-4 w-4 mr-1.5" /> Open Map Picker
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Tap the map or drag the pin to set the exact delivery point.
+                  Tap Open Map Picker on phone, then tap the map or drag the pin.
                 </p>
               </div>
             )}
