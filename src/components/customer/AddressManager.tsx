@@ -42,6 +42,8 @@ const INDIA_BOUNDS = {
   east: 97.5,
 };
 const INDIA_CENTER = { lat: 20.5937, lng: 78.9629 };
+const isPhoneViewport = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
 const AddressManager = () => {
   const { user } = useAuth();
@@ -75,6 +77,7 @@ const AddressManager = () => {
   const markerRef = useRef<any>(null);
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<any>(null);
+  const [mapActivated, setMapActivated] = useState(false);
 
   // Load saved address
   useEffect(() => {
@@ -132,99 +135,118 @@ const AddressManager = () => {
     return () => clearTimeout(t);
   }, [searchQuery, dialogOpen, useGoogle]);
 
-  // Initialize Google Map + Autocomplete when dialog opens
-  useEffect(() => {
-    if (!dialogOpen || !useGoogle) return;
+  const initializeGoogleMap = (force = false) => {
+    if (!dialogOpen || !useGoogle || (!mapActivated && !force)) return;
     const g = (window as any).google;
-    if (!g?.maps) return;
+    if (!g?.maps || !mapDivRef.current) return;
 
-    // Defer to next tick so refs mount
-    const t = setTimeout(() => {
-      if (!mapDivRef.current) return;
-      const startLat = editLat ?? INDIA_CENTER.lat;
-      const startLng = editLng ?? INDIA_CENTER.lng;
-      const startZoom = editLat != null && editLng != null ? 16 : 5;
+    mapDivRef.current.style.touchAction = "none";
+    const startLat = editLat ?? INDIA_CENTER.lat;
+    const startLng = editLng ?? INDIA_CENTER.lng;
+    const startZoom = editLat != null && editLng != null ? 16 : 5;
 
-      mapRef.current = new g.maps.Map(mapDivRef.current, {
-        center: { lat: startLat, lng: startLng },
-        zoom: startZoom,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        restriction: {
-          latLngBounds: INDIA_BOUNDS,
-          strictBounds: false,
-        },
+    if (mapRef.current) {
+      g.maps.event.trigger(mapRef.current, "resize");
+      mapRef.current.panTo({ lat: startLat, lng: startLng });
+      return;
+    }
+
+    mapRef.current = new g.maps.Map(mapDivRef.current, {
+      center: { lat: startLat, lng: startLng },
+      zoom: startZoom,
+      gestureHandling: "greedy",
+      clickableIcons: false,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      restriction: {
+        latLngBounds: INDIA_BOUNDS,
+        strictBounds: false,
+      },
+    });
+
+    markerRef.current = new g.maps.Marker({
+      map: mapRef.current,
+      position: { lat: startLat, lng: startLng },
+      draggable: true,
+      visible: editLat != null && editLng != null,
+    });
+
+    const handlePos = async (lat: number, lng: number) => {
+      setEditLat(lat);
+      setEditLng(lng);
+      markerRef.current?.setPosition({ lat, lng });
+      markerRef.current?.setVisible(true);
+      try {
+        const geocoder = new g.maps.Geocoder();
+        const res = await geocoder.geocode({ location: { lat, lng } });
+        const formatted = res?.results?.[0]?.formatted_address;
+        if (formatted) setEditAddress(formatted);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    mapRef.current.addListener("click", (e: any) => {
+      if (!e.latLng) return;
+      handlePos(e.latLng.lat(), e.latLng.lng());
+    });
+    markerRef.current.addListener("dragend", (e: any) => {
+      if (!e.latLng) return;
+      handlePos(e.latLng.lat(), e.latLng.lng());
+    });
+
+    if (autocompleteInputRef.current && !autocompleteRef.current) {
+      autocompleteRef.current = new g.maps.places.Autocomplete(autocompleteInputRef.current, {
+        componentRestrictions: { country: "in" },
+        fields: ["formatted_address", "geometry", "name"],
+        bounds: new g.maps.LatLngBounds(
+          { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
+          { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
+        ),
       });
-
-      markerRef.current = new g.maps.Marker({
-        map: mapRef.current,
-        position: { lat: startLat, lng: startLng },
-        draggable: true,
-        visible: editLat != null && editLng != null,
-      });
-
-      const handlePos = async (lat: number, lng: number) => {
+      autocompleteRef.current.addListener("place_changed", () => {
+        const place = autocompleteRef.current.getPlace();
+        if (!place?.geometry?.location) {
+          toast.error("Please pick a place from the suggestions");
+          return;
+        }
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
         setEditLat(lat);
         setEditLng(lng);
-        markerRef.current.setPosition({ lat, lng });
-        markerRef.current.setVisible(true);
-        // Reverse geocode
-        try {
-          const geocoder = new g.maps.Geocoder();
-          const res = await geocoder.geocode({ location: { lat, lng } });
-          const formatted = res?.results?.[0]?.formatted_address;
-          if (formatted) setEditAddress(formatted);
-        } catch {
-          /* ignore */
-        }
-      };
-
-      mapRef.current.addListener("click", (e: any) => {
-        if (!e.latLng) return;
-        handlePos(e.latLng.lat(), e.latLng.lng());
+        setEditAddress(place.formatted_address || place.name || "");
+        markerRef.current?.setPosition({ lat, lng });
+        markerRef.current?.setVisible(true);
+        mapRef.current?.panTo({ lat, lng });
+        mapRef.current?.setZoom(16);
       });
-      markerRef.current.addListener("dragend", (e: any) => {
-        if (!e.latLng) return;
-        handlePos(e.latLng.lat(), e.latLng.lng());
-      });
+    }
 
-      // Places Autocomplete
-      if (autocompleteInputRef.current) {
-        autocompleteRef.current = new g.maps.places.Autocomplete(autocompleteInputRef.current, {
-          componentRestrictions: { country: "in" },
-          fields: ["formatted_address", "geometry", "name"],
-          bounds: new g.maps.LatLngBounds(
-            { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
-            { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
-          ),
-        });
-        autocompleteRef.current.addListener("place_changed", () => {
-          const place = autocompleteRef.current.getPlace();
-          if (!place?.geometry?.location) {
-            toast.error("Please pick a place from the suggestions");
-            return;
-          }
-          const lat = place.geometry.location.lat();
-          const lng = place.geometry.location.lng();
-          setEditLat(lat);
-          setEditLng(lng);
-          setEditAddress(place.formatted_address || place.name || "");
-          markerRef.current.setPosition({ lat, lng });
-          markerRef.current.setVisible(true);
-          mapRef.current.panTo({ lat, lng });
-          mapRef.current.setZoom(16);
-        });
-      }
-    }, 50);
+    setTimeout(() => {
+      if (!mapRef.current) return;
+      g.maps.event.trigger(mapRef.current, "resize");
+      mapRef.current.panTo({ lat: startLat, lng: startLng });
+    }, 150);
+  };
+
+  // Initialize Google Map + Autocomplete when the dialog is open and the user enables it.
+  useEffect(() => {
+    if (!dialogOpen || !useGoogle || !mapActivated) return;
+    const frame = window.requestAnimationFrame(() => initializeGoogleMap());
+    const t = window.setTimeout(() => initializeGoogleMap(), 250);
 
     return () => {
+      window.cancelAnimationFrame(frame);
       clearTimeout(t);
-      mapRef.current = null;
-      markerRef.current = null;
-      autocompleteRef.current = null;
     };
-  }, [dialogOpen, useGoogle]);
+  }, [dialogOpen, useGoogle, mapActivated]);
+
+  const activateMapPicker = () => {
+    setMapActivated(true);
+    initializeGoogleMap(true);
+    window.setTimeout(() => initializeGoogleMap(true), 80);
+  };
 
   const openAdd = () => {
     setEditAddress("");
@@ -232,6 +254,10 @@ const AddressManager = () => {
     setEditLng(null);
     setSearchQuery("");
     setResults([]);
+    setMapActivated(!isPhoneViewport());
+    mapRef.current = null;
+    markerRef.current = null;
+    autocompleteRef.current = null;
     setDialogOpen(true);
   };
 
@@ -241,6 +267,10 @@ const AddressManager = () => {
     setEditLng(savedLng);
     setSearchQuery("");
     setResults([]);
+    setMapActivated(!isPhoneViewport());
+    mapRef.current = null;
+    markerRef.current = null;
+    autocompleteRef.current = null;
     setDialogOpen(true);
   };
 
