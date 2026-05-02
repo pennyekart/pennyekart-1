@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, LocateFixed, Search, Loader2, ExternalLink, Trash2, Pencil, Plus, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,49 @@ interface NominatimResult {
   lat: string;
   lon: string;
 }
+
+type ProfileLocation = {
+  business_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+type GoogleLatLng = { lat: () => number; lng: () => number };
+type GoogleMapMouseEvent = { latLng?: GoogleLatLng };
+type GooglePlace = {
+  formatted_address?: string;
+  name?: string;
+  geometry?: { location?: GoogleLatLng };
+};
+type GoogleAutocomplete = {
+  addListener: (eventName: "place_changed", callback: () => void) => void;
+  getPlace: () => GooglePlace;
+};
+type GoogleMarker = {
+  setPosition: (position: { lat: number; lng: number }) => void;
+  setVisible: (visible: boolean) => void;
+  addListener: (eventName: "dragend", callback: (event: GoogleMapMouseEvent) => void) => void;
+};
+type GoogleMap = {
+  panTo: (position: { lat: number; lng: number }) => void;
+  setZoom: (zoom: number) => void;
+  addListener: (eventName: "click", callback: (event: GoogleMapMouseEvent) => void) => void;
+};
+type GoogleMapsApi = {
+  Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
+  Marker: new (options: Record<string, unknown>) => GoogleMarker;
+  Geocoder: new () => {
+    geocode: (request: { location: { lat: number; lng: number } }) => Promise<{ results?: { formatted_address?: string }[] }>;
+  };
+  LatLngBounds: new (southWest: { lat: number; lng: number }, northEast: { lat: number; lng: number }) => unknown;
+  event: { trigger: (instance: GoogleMap, eventName: "resize") => void };
+  places: {
+    Autocomplete: new (input: HTMLInputElement, options: Record<string, unknown>) => GoogleAutocomplete;
+  };
+};
+type GoogleWindow = Window & { google?: { maps?: GoogleMapsApi } };
+
+const getGoogleMapsApi = () => (window as GoogleWindow).google?.maps ?? null;
 
 // India bounds (approx) for biasing search + map
 const INDIA_BOUNDS = {
@@ -73,10 +116,10 @@ const AddressManager = () => {
 
   // Google Maps refs
   const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const mapRef = useRef<GoogleMap | null>(null);
+  const markerRef = useRef<GoogleMarker | null>(null);
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
-  const autocompleteRef = useRef<any>(null);
+  const autocompleteRef = useRef<GoogleAutocomplete | null>(null);
   const [mapActivated, setMapActivated] = useState(false);
 
   // Load saved address
@@ -91,10 +134,11 @@ const AddressManager = () => {
         .select("business_address, latitude, longitude")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data) {
-        setSavedAddress((data as any).business_address ?? null);
-        setSavedLat((data as any).latitude ?? null);
-        setSavedLng((data as any).longitude ?? null);
+      const profile = data as ProfileLocation | null;
+      if (profile) {
+        setSavedAddress(profile.business_address ?? null);
+        setSavedLat(profile.latitude ?? null);
+        setSavedLng(profile.longitude ?? null);
       }
       setLoading(false);
     })();
@@ -123,8 +167,8 @@ const AddressManager = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: NominatimResult[] = await res.json();
         setResults(data || []);
-      } catch (err: any) {
-        if (err?.name !== "AbortError") {
+      } catch (err: unknown) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
           toast.error("Place search failed. You can still type the address manually.");
           setResults([]);
         }
