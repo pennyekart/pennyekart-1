@@ -190,12 +190,12 @@ const AddressManager = () => {
     const startZoom = editLat != null && editLng != null ? 16 : 5;
 
     if (mapRef.current) {
-      g.maps.event.trigger(mapRef.current, "resize");
+      g.event.trigger(mapRef.current, "resize");
       mapRef.current.panTo({ lat: startLat, lng: startLng });
       return;
     }
 
-    mapRef.current = new g.maps.Map(mapDivRef.current, {
+    mapRef.current = new g.Map(mapDivRef.current, {
       center: { lat: startLat, lng: startLng },
       zoom: startZoom,
       gestureHandling: "greedy",
@@ -209,7 +209,7 @@ const AddressManager = () => {
       },
     });
 
-    markerRef.current = new g.maps.Marker({
+    markerRef.current = new g.Marker({
       map: mapRef.current,
       position: { lat: startLat, lng: startLng },
       draggable: true,
@@ -222,7 +222,7 @@ const AddressManager = () => {
       markerRef.current?.setPosition({ lat, lng });
       markerRef.current?.setVisible(true);
       try {
-        const geocoder = new g.maps.Geocoder();
+        const geocoder = new g.Geocoder();
         const res = await geocoder.geocode({ location: { lat, lng } });
         const formatted = res?.results?.[0]?.formatted_address;
         if (formatted) setEditAddress(formatted);
@@ -241,10 +241,10 @@ const AddressManager = () => {
     });
 
     if (autocompleteInputRef.current && !autocompleteRef.current) {
-      autocompleteRef.current = new g.maps.places.Autocomplete(autocompleteInputRef.current, {
+      autocompleteRef.current = new g.places.Autocomplete(autocompleteInputRef.current, {
         componentRestrictions: { country: "in" },
         fields: ["formatted_address", "geometry", "name"],
-        bounds: new g.maps.LatLngBounds(
+        bounds: new g.LatLngBounds(
           { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
           { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
         ),
@@ -269,7 +269,7 @@ const AddressManager = () => {
 
     setTimeout(() => {
       if (!mapRef.current) return;
-      g.maps.event.trigger(mapRef.current, "resize");
+      g.event.trigger(mapRef.current, "resize");
       mapRef.current.panTo({ lat: startLat, lng: startLng });
     }, 150);
   }, [dialogOpen, editLat, editLng, mapActivated, useGoogle]);
