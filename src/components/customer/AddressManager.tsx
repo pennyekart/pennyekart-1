@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, LocateFixed, Search, Loader2, ExternalLink, Trash2, Pencil, Plus, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,49 @@ interface NominatimResult {
   lon: string;
 }
 
+type ProfileLocation = {
+  business_address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+type GoogleLatLng = { lat: () => number; lng: () => number };
+type GoogleMapMouseEvent = { latLng?: GoogleLatLng };
+type GooglePlace = {
+  formatted_address?: string;
+  name?: string;
+  geometry?: { location?: GoogleLatLng };
+};
+type GoogleAutocomplete = {
+  addListener: (eventName: "place_changed", callback: () => void) => void;
+  getPlace: () => GooglePlace;
+};
+type GoogleMarker = {
+  setPosition: (position: { lat: number; lng: number }) => void;
+  setVisible: (visible: boolean) => void;
+  addListener: (eventName: "dragend", callback: (event: GoogleMapMouseEvent) => void) => void;
+};
+type GoogleMap = {
+  panTo: (position: { lat: number; lng: number }) => void;
+  setZoom: (zoom: number) => void;
+  addListener: (eventName: "click", callback: (event: GoogleMapMouseEvent) => void) => void;
+};
+type GoogleMapsApi = {
+  Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
+  Marker: new (options: Record<string, unknown>) => GoogleMarker;
+  Geocoder: new () => {
+    geocode: (request: { location: { lat: number; lng: number } }) => Promise<{ results?: { formatted_address?: string }[] }>;
+  };
+  LatLngBounds: new (southWest: { lat: number; lng: number }, northEast: { lat: number; lng: number }) => unknown;
+  event: { trigger: (instance: GoogleMap, eventName: "resize") => void };
+  places: {
+    Autocomplete: new (input: HTMLInputElement, options: Record<string, unknown>) => GoogleAutocomplete;
+  };
+};
+type GoogleWindow = Window & { google?: { maps?: GoogleMapsApi } };
+
+const getGoogleMapsApi = () => (window as GoogleWindow).google?.maps ?? null;
+
 // India bounds (approx) for biasing search + map
 const INDIA_BOUNDS = {
   south: 6.5,
@@ -42,6 +85,8 @@ const INDIA_BOUNDS = {
   east: 97.5,
 };
 const INDIA_CENTER = { lat: 20.5937, lng: 78.9629 };
+const isPhoneViewport = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
 const AddressManager = () => {
   const { user } = useAuth();
@@ -71,10 +116,11 @@ const AddressManager = () => {
 
   // Google Maps refs
   const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const mapRef = useRef<GoogleMap | null>(null);
+  const markerRef = useRef<GoogleMarker | null>(null);
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
-  const autocompleteRef = useRef<any>(null);
+  const autocompleteRef = useRef<GoogleAutocomplete | null>(null);
+  const [mapActivated, setMapActivated] = useState(false);
 
   // Load saved address
   useEffect(() => {
@@ -88,10 +134,11 @@ const AddressManager = () => {
         .select("business_address, latitude, longitude")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (data) {
-        setSavedAddress((data as any).business_address ?? null);
-        setSavedLat((data as any).latitude ?? null);
-        setSavedLng((data as any).longitude ?? null);
+      const profile = data as ProfileLocation | null;
+      if (profile) {
+        setSavedAddress(profile.business_address ?? null);
+        setSavedLat(profile.latitude ?? null);
+        setSavedLng(profile.longitude ?? null);
       }
       setLoading(false);
     })();
@@ -120,8 +167,8 @@ const AddressManager = () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data: NominatimResult[] = await res.json();
         setResults(data || []);
-      } catch (err: any) {
-        if (err?.name !== "AbortError") {
+      } catch (err: unknown) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
           toast.error("Place search failed. You can still type the address manually.");
           setResults([]);
         }
@@ -132,99 +179,118 @@ const AddressManager = () => {
     return () => clearTimeout(t);
   }, [searchQuery, dialogOpen, useGoogle]);
 
-  // Initialize Google Map + Autocomplete when dialog opens
-  useEffect(() => {
-    if (!dialogOpen || !useGoogle) return;
-    const g = (window as any).google;
-    if (!g?.maps) return;
+  const initializeGoogleMap = useCallback((force = false) => {
+    if (!dialogOpen || !useGoogle || (!mapActivated && !force)) return;
+    const g = getGoogleMapsApi();
+    if (!g || !mapDivRef.current) return;
 
-    // Defer to next tick so refs mount
-    const t = setTimeout(() => {
-      if (!mapDivRef.current) return;
-      const startLat = editLat ?? INDIA_CENTER.lat;
-      const startLng = editLng ?? INDIA_CENTER.lng;
-      const startZoom = editLat != null && editLng != null ? 16 : 5;
+    mapDivRef.current.style.touchAction = "none";
+    const startLat = editLat ?? INDIA_CENTER.lat;
+    const startLng = editLng ?? INDIA_CENTER.lng;
+    const startZoom = editLat != null && editLng != null ? 16 : 5;
 
-      mapRef.current = new g.maps.Map(mapDivRef.current, {
-        center: { lat: startLat, lng: startLng },
-        zoom: startZoom,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        restriction: {
-          latLngBounds: INDIA_BOUNDS,
-          strictBounds: false,
-        },
+    if (mapRef.current) {
+      g.event.trigger(mapRef.current, "resize");
+      mapRef.current.panTo({ lat: startLat, lng: startLng });
+      return;
+    }
+
+    mapRef.current = new g.Map(mapDivRef.current, {
+      center: { lat: startLat, lng: startLng },
+      zoom: startZoom,
+      gestureHandling: "greedy",
+      clickableIcons: false,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      restriction: {
+        latLngBounds: INDIA_BOUNDS,
+        strictBounds: false,
+      },
+    });
+
+    markerRef.current = new g.Marker({
+      map: mapRef.current,
+      position: { lat: startLat, lng: startLng },
+      draggable: true,
+      visible: editLat != null && editLng != null,
+    });
+
+    const handlePos = async (lat: number, lng: number) => {
+      setEditLat(lat);
+      setEditLng(lng);
+      markerRef.current?.setPosition({ lat, lng });
+      markerRef.current?.setVisible(true);
+      try {
+        const geocoder = new g.Geocoder();
+        const res = await geocoder.geocode({ location: { lat, lng } });
+        const formatted = res?.results?.[0]?.formatted_address;
+        if (formatted) setEditAddress(formatted);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    mapRef.current.addListener("click", (e: GoogleMapMouseEvent) => {
+      if (!e.latLng) return;
+      handlePos(e.latLng.lat(), e.latLng.lng());
+    });
+    markerRef.current.addListener("dragend", (e: GoogleMapMouseEvent) => {
+      if (!e.latLng) return;
+      handlePos(e.latLng.lat(), e.latLng.lng());
+    });
+
+    if (autocompleteInputRef.current && !autocompleteRef.current) {
+      autocompleteRef.current = new g.places.Autocomplete(autocompleteInputRef.current, {
+        componentRestrictions: { country: "in" },
+        fields: ["formatted_address", "geometry", "name"],
+        bounds: new g.LatLngBounds(
+          { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
+          { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
+        ),
       });
-
-      markerRef.current = new g.maps.Marker({
-        map: mapRef.current,
-        position: { lat: startLat, lng: startLng },
-        draggable: true,
-        visible: editLat != null && editLng != null,
-      });
-
-      const handlePos = async (lat: number, lng: number) => {
+      autocompleteRef.current.addListener("place_changed", () => {
+        const place = autocompleteRef.current.getPlace();
+        if (!place?.geometry?.location) {
+          toast.error("Please pick a place from the suggestions");
+          return;
+        }
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
         setEditLat(lat);
         setEditLng(lng);
-        markerRef.current.setPosition({ lat, lng });
-        markerRef.current.setVisible(true);
-        // Reverse geocode
-        try {
-          const geocoder = new g.maps.Geocoder();
-          const res = await geocoder.geocode({ location: { lat, lng } });
-          const formatted = res?.results?.[0]?.formatted_address;
-          if (formatted) setEditAddress(formatted);
-        } catch {
-          /* ignore */
-        }
-      };
-
-      mapRef.current.addListener("click", (e: any) => {
-        if (!e.latLng) return;
-        handlePos(e.latLng.lat(), e.latLng.lng());
+        setEditAddress(place.formatted_address || place.name || "");
+        markerRef.current?.setPosition({ lat, lng });
+        markerRef.current?.setVisible(true);
+        mapRef.current?.panTo({ lat, lng });
+        mapRef.current?.setZoom(16);
       });
-      markerRef.current.addListener("dragend", (e: any) => {
-        if (!e.latLng) return;
-        handlePos(e.latLng.lat(), e.latLng.lng());
-      });
+    }
 
-      // Places Autocomplete
-      if (autocompleteInputRef.current) {
-        autocompleteRef.current = new g.maps.places.Autocomplete(autocompleteInputRef.current, {
-          componentRestrictions: { country: "in" },
-          fields: ["formatted_address", "geometry", "name"],
-          bounds: new g.maps.LatLngBounds(
-            { lat: INDIA_BOUNDS.south, lng: INDIA_BOUNDS.west },
-            { lat: INDIA_BOUNDS.north, lng: INDIA_BOUNDS.east }
-          ),
-        });
-        autocompleteRef.current.addListener("place_changed", () => {
-          const place = autocompleteRef.current.getPlace();
-          if (!place?.geometry?.location) {
-            toast.error("Please pick a place from the suggestions");
-            return;
-          }
-          const lat = place.geometry.location.lat();
-          const lng = place.geometry.location.lng();
-          setEditLat(lat);
-          setEditLng(lng);
-          setEditAddress(place.formatted_address || place.name || "");
-          markerRef.current.setPosition({ lat, lng });
-          markerRef.current.setVisible(true);
-          mapRef.current.panTo({ lat, lng });
-          mapRef.current.setZoom(16);
-        });
-      }
-    }, 50);
+    setTimeout(() => {
+      if (!mapRef.current) return;
+      g.event.trigger(mapRef.current, "resize");
+      mapRef.current.panTo({ lat: startLat, lng: startLng });
+    }, 150);
+  }, [dialogOpen, editLat, editLng, mapActivated, useGoogle]);
+
+  // Initialize Google Map + Autocomplete when the dialog is open and the user enables it.
+  useEffect(() => {
+    if (!dialogOpen || !useGoogle || !mapActivated) return;
+    const frame = window.requestAnimationFrame(() => initializeGoogleMap());
+    const t = window.setTimeout(() => initializeGoogleMap(), 250);
 
     return () => {
+      window.cancelAnimationFrame(frame);
       clearTimeout(t);
-      mapRef.current = null;
-      markerRef.current = null;
-      autocompleteRef.current = null;
     };
-  }, [dialogOpen, useGoogle]);
+  }, [dialogOpen, useGoogle, mapActivated, initializeGoogleMap]);
+
+  const activateMapPicker = () => {
+    setMapActivated(true);
+    initializeGoogleMap(true);
+    window.setTimeout(() => initializeGoogleMap(true), 80);
+  };
 
   const openAdd = () => {
     setEditAddress("");
@@ -232,6 +298,10 @@ const AddressManager = () => {
     setEditLng(null);
     setSearchQuery("");
     setResults([]);
+    setMapActivated(!isPhoneViewport());
+    mapRef.current = null;
+    markerRef.current = null;
+    autocompleteRef.current = null;
     setDialogOpen(true);
   };
 
@@ -241,6 +311,10 @@ const AddressManager = () => {
     setEditLng(savedLng);
     setSearchQuery("");
     setResults([]);
+    setMapActivated(!isPhoneViewport());
+    mapRef.current = null;
+    markerRef.current = null;
+    autocompleteRef.current = null;
     setDialogOpen(true);
   };
 
@@ -271,8 +345,9 @@ const AddressManager = () => {
           mapRef.current.panTo({ lat: latitude, lng: longitude });
           mapRef.current.setZoom(16);
           try {
-            const g = (window as any).google;
-            const geocoder = new g.maps.Geocoder();
+            const g = getGoogleMapsApi();
+            if (!g) throw new Error("Google Maps unavailable");
+            const geocoder = new g.Geocoder();
             const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
             const formatted = res?.results?.[0]?.formatted_address;
             if (formatted) {
@@ -356,7 +431,7 @@ const AddressManager = () => {
         business_address: trimmed,
         latitude: editLat,
         longitude: editLng,
-      } as any)
+      })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) {
@@ -375,7 +450,7 @@ const AddressManager = () => {
     setRemoving(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ business_address: null, latitude: null, longitude: null } as any)
+      .update({ business_address: null, latitude: null, longitude: null })
       .eq("user_id", user.id);
     setRemoving(false);
     if (error) {
@@ -528,12 +603,18 @@ const AddressManager = () => {
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Pick on map (drag pin)
                 </label>
-                <div
-                  ref={mapDivRef}
-                  className="mt-1 h-56 w-full rounded-md border border-border bg-muted"
-                />
+                <div className="relative mt-1 h-64 w-full overflow-hidden rounded-md border border-border bg-muted sm:h-56">
+                  <div ref={mapDivRef} className="h-full w-full touch-none" />
+                  {!mapActivated && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted/95 p-4">
+                      <Button type="button" onClick={activateMapPicker} className="w-full max-w-56 justify-center">
+                        <MapPin className="h-4 w-4 mr-1.5" /> Open Map Picker
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Tap the map or drag the pin to set the exact delivery point.
+                  Tap Open Map Picker on phone, then tap the map or drag the pin.
                 </p>
               </div>
             )}
