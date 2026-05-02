@@ -179,10 +179,10 @@ const AddressManager = () => {
     return () => clearTimeout(t);
   }, [searchQuery, dialogOpen, useGoogle]);
 
-  const initializeGoogleMap = (force = false) => {
+  const initializeGoogleMap = useCallback((force = false) => {
     if (!dialogOpen || !useGoogle || (!mapActivated && !force)) return;
-    const g = (window as any).google;
-    if (!g?.maps || !mapDivRef.current) return;
+    const g = getGoogleMapsApi();
+    if (!g || !mapDivRef.current) return;
 
     mapDivRef.current.style.touchAction = "none";
     const startLat = editLat ?? INDIA_CENTER.lat;
@@ -231,11 +231,11 @@ const AddressManager = () => {
       }
     };
 
-    mapRef.current.addListener("click", (e: any) => {
+    mapRef.current.addListener("click", (e: GoogleMapMouseEvent) => {
       if (!e.latLng) return;
       handlePos(e.latLng.lat(), e.latLng.lng());
     });
-    markerRef.current.addListener("dragend", (e: any) => {
+    markerRef.current.addListener("dragend", (e: GoogleMapMouseEvent) => {
       if (!e.latLng) return;
       handlePos(e.latLng.lat(), e.latLng.lng());
     });
@@ -272,7 +272,7 @@ const AddressManager = () => {
       g.maps.event.trigger(mapRef.current, "resize");
       mapRef.current.panTo({ lat: startLat, lng: startLng });
     }, 150);
-  };
+  }, [dialogOpen, editLat, editLng, mapActivated, useGoogle]);
 
   // Initialize Google Map + Autocomplete when the dialog is open and the user enables it.
   useEffect(() => {
@@ -284,7 +284,7 @@ const AddressManager = () => {
       window.cancelAnimationFrame(frame);
       clearTimeout(t);
     };
-  }, [dialogOpen, useGoogle, mapActivated]);
+  }, [dialogOpen, useGoogle, mapActivated, initializeGoogleMap]);
 
   const activateMapPicker = () => {
     setMapActivated(true);
