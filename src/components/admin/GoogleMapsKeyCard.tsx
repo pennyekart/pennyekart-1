@@ -15,6 +15,7 @@ const GoogleMapsKeyCard = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [show, setShow] = useState(false);
+  const referrerPattern = typeof window !== "undefined" ? `${window.location.origin}/*` : "https://your-domain.com/*";
 
   useEffect(() => {
     (async () => {
@@ -98,7 +99,8 @@ const GoogleMapsKeyCard = () => {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Restrict this key in Google Cloud Console to your site's HTTP referrers.
+          Restrict this key in Google Cloud Console to your site's HTTP referrers. Add: {" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-foreground break-all">{referrerPattern}</code>
         </p>
       </CardContent>
     </Card>
