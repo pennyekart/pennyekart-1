@@ -345,8 +345,9 @@ const AddressManager = () => {
           mapRef.current.panTo({ lat: latitude, lng: longitude });
           mapRef.current.setZoom(16);
           try {
-            const g = (window as any).google;
-            const geocoder = new g.maps.Geocoder();
+            const g = getGoogleMapsApi();
+            if (!g) throw new Error("Google Maps unavailable");
+            const geocoder = new g.Geocoder();
             const res = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
             const formatted = res?.results?.[0]?.formatted_address;
             if (formatted) {
@@ -430,7 +431,7 @@ const AddressManager = () => {
         business_address: trimmed,
         latitude: editLat,
         longitude: editLng,
-      } as any)
+      })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) {
@@ -449,7 +450,7 @@ const AddressManager = () => {
     setRemoving(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ business_address: null, latitude: null, longitude: null } as any)
+      .update({ business_address: null, latitude: null, longitude: null })
       .eq("user_id", user.id);
     setRemoving(false);
     if (error) {
