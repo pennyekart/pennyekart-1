@@ -43,7 +43,7 @@ function loadScript(key: string): Promise<void> {
     const s = document.createElement("script");
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       key
-    )}&libraries=places&callback=${cbName}&region=IN&language=en`;
+    )}&libraries=places&callback=${cbName}&region=IN&language=en&loading=async`;
     s.async = true;
     s.defer = true;
     s.onerror = () => reject(new Error("Failed to load Google Maps"));
