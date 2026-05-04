@@ -6,12 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, ExternalLink, Upload, Smartphone, X, Apple } from "lucide-react";
+import { Loader2, Save, ExternalLink, Upload, Smartphone, X, Apple, Utensils } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import carbsLogo from "@/assets/carbs-logo.png";
 
 const AppSettingsPage = () => {
   const { toast } = useToast();
   const [carbsUrl, setCarbsUrl] = useState("");
+  const [carbsApiUrl, setCarbsApiUrl] = useState("");
+  const [carbsApiKey, setCarbsApiKey] = useState("");
+  const [carbsBannerEnabled, setCarbsBannerEnabled] = useState(false);
+  const [savingCarbsApi, setSavingCarbsApi] = useState(false);
   const [androidUrl, setAndroidUrl] = useState("");
   const [iosUrl, setIosUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,12 +31,22 @@ const AppSettingsPage = () => {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["pennycarbs_url", "android_app_url", "ios_app_url"]);
+        .in("key", [
+          "pennycarbs_url",
+          "android_app_url",
+          "ios_app_url",
+          "pennycarbs_items_api_url",
+          "pennycarbs_api_key",
+          "pennycarbs_banner_enabled",
+        ]);
       
       data?.forEach((row) => {
         if (row.key === "pennycarbs_url") setCarbsUrl(row.value ?? "");
         if (row.key === "android_app_url") setAndroidUrl(row.value ?? "");
         if (row.key === "ios_app_url") setIosUrl(row.value ?? "");
+        if (row.key === "pennycarbs_items_api_url") setCarbsApiUrl(row.value ?? "");
+        if (row.key === "pennycarbs_api_key") setCarbsApiKey(row.value ?? "");
+        if (row.key === "pennycarbs_banner_enabled") setCarbsBannerEnabled(row.value === "true");
       });
       setLoading(false);
     };
@@ -124,6 +139,41 @@ const AppSettingsPage = () => {
     }
   };
 
+  const upsertSetting = async (key: string, value: string | null, description?: string) => {
+    const { data: existing } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", key)
+      .maybeSingle();
+    if (existing) {
+      const { error } = await supabase.from("app_settings").update({ value }).eq("key", key);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("app_settings")
+        .insert({ key, value, description: description ?? key });
+      if (error) throw error;
+    }
+  };
+
+  const handleSaveCarbsApi = async () => {
+    setSavingCarbsApi(true);
+    try {
+      await upsertSetting("pennycarbs_items_api_url", carbsApiUrl.trim(), "Penny Carbs items API URL");
+      await upsertSetting("pennycarbs_api_key", carbsApiKey.trim(), "Penny Carbs items API key");
+      await upsertSetting(
+        "pennycarbs_banner_enabled",
+        carbsBannerEnabled ? "true" : "false",
+        "Show Penny Carbs banner on homepage"
+      );
+      toast({ title: "Penny Carbs API settings saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingCarbsApi(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <h1 className="mb-6 text-2xl font-bold">App Settings</h1>
@@ -181,6 +231,68 @@ const AppSettingsPage = () => {
                 <Button onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Settings
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Penny Carbs Items API */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Utensils className="h-6 w-6 text-accent" />
+              <div>
+                <CardTitle>Penny Carbs — Food Items API</CardTitle>
+                <CardDescription>
+                  Configure the API that powers the auto-rotating food banner shown below the navbar on the customer homepage.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <Label className="text-sm font-medium">Show banner on homepage</Label>
+                    <p className="text-xs text-muted-foreground">Hides automatically when no items are returned.</p>
+                  </div>
+                  <Switch checked={carbsBannerEnabled} onCheckedChange={setCarbsBannerEnabled} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="carbsApiUrl">Items API URL</Label>
+                  <Input
+                    id="carbsApiUrl"
+                    type="url"
+                    placeholder="https://penny-carbs.vercel.app/api/featured-items"
+                    value={carbsApiUrl}
+                    onChange={(e) => setCarbsApiUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Endpoint must return JSON: <code className="rounded bg-muted px-1">[{`{ "name", "image_url", "price?" }`}]</code> (or <code className="rounded bg-muted px-1">{`{ items: [...] }`}</code>).
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="carbsApiKey">API Key (optional)</Label>
+                  <Input
+                    id="carbsApiKey"
+                    type="password"
+                    placeholder="Sent as Authorization: Bearer …"
+                    value={carbsApiKey}
+                    onChange={(e) => setCarbsApiKey(e.target.value)}
+                  />
+                </div>
+
+                <Button onClick={handleSaveCarbsApi} disabled={savingCarbsApi}>
+                  {savingCarbsApi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save API Settings
                 </Button>
               </>
             )}
