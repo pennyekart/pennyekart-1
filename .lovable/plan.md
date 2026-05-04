@@ -1,91 +1,104 @@
-## Problem
+## Goal
 
-The Addresses tab on `/customer/profile?tab=addresses` is just a static placeholder. There is no working UI for:
+1. Remove the "Food Delivery" (Penny Carbs) button from the top platform selector.
+2. Add a wide horizontal "Penny Carbs — Food Delivery" banner directly below the navbar on the customer homepage.
+3. The banner shows food items (image + name) fetched from Penny Carbs and auto-rotates them.
+4. Admin can configure a Penny Carbs items API endpoint + API key on `/admin/settings`.
 
-- Setting / editing the delivery address
-- Searching for a place by name
-- Using "current GPS location"
+---
 
-The "Add Address" button has no `onClick` handler, so it does nothing — that matches the session replay (3 clicks, no effect).
+## 1. Admin: Penny Carbs API config (`/admin/settings`)
 
-The Cart page already has a working pattern for the same data (saves to `profiles.business_address` + `profiles.latitude` / `profiles.longitude`). We will reuse that storage so the address set on the profile flows through to checkout automatically.
+Add a new card to `src/pages/admin/AppSettingsPage.tsx` titled **"Penny Carbs — Food Delivery API"** with three fields, all stored in `app_settings`:
 
-## What to build
+| Key | Purpose |
+|---|---|
+| `pennycarbs_items_api_url` | Full URL that returns a JSON list of items (e.g. `https://penny-carbs.vercel.app/api/featured-items`) |
+| `pennycarbs_api_key` | Optional bearer/api key sent as `Authorization: Bearer …` if present |
+| `pennycarbs_banner_enabled` | `'true'` / `'false'` toggle to show/hide the homepage banner |
 
-Replace the placeholder card in `src/pages/customer/Profile.tsx` (the `activeSection === "addresses"` block) with a real Address Management card.
+(`pennycarbs_url` — the existing iframe target — stays as-is and remains the link target when a user taps the banner.)
 
-### 1. Saved Address card
-- Loads `business_address`, `latitude`, `longitude` from `profiles` for the logged-in user on mount.
-- Shows the saved address text and, if present, a small GPS chip with `lat, lng` (5 decimals) plus a Google Maps link.
-- Buttons: `Edit Address`, `Remove Address`.
-- If no address yet: shows empty state with a single `Add Delivery Address` button.
+The expected API response shape (documented in the card's helper text so the Penny Carbs side can match it):
 
-### 2. Edit Address dialog
-Opens from "Add" / "Edit". Contains three things, in this order:
-
-a. Search a place (text input)
-- Debounced 400 ms.
-- Calls OpenStreetMap Nominatim (`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=in&q=...`) with header `Accept-Language: en` and a custom `User-Agent` is not required from browsers — Nominatim works directly from the client and needs no API key.
-- Renders results list. Clicking a result fills the address textarea with `display_name` and stores `lat` / `lon` from the result.
-- Shows "No results" / "Searching..." states. Errors show a toast and let the user type manually.
-
-b. Use my current GPS location (button)
-- Uses `navigator.geolocation.getCurrentPosition` with `enableHighAccuracy: true`, `timeout: 10000`.
-- On success: stores lat/lng locally, then reverse-geocodes via Nominatim (`/reverse?format=json&lat=...&lon=...`) and pre-fills the address textarea with the returned `display_name`. User can still edit it.
-- On error / denied / unsupported: clear toast explaining what to do (e.g. "Enable location access in your browser settings"). Never silently fail.
-- Disabled while in-flight; shows "Getting location..." label.
-
-c. Address textarea
-- Multi-line, full address text. Required to save.
-- Hint: "House no, Street, Landmark, Pincode".
-
-Footer: `Cancel` / `Save Address` (disabled until address is non-empty).
-
-### 3. Save behavior
-- Single Supabase update on `profiles` where `user_id = auth user.id`:
-  - `business_address = <textarea value, trimmed>`
-  - `latitude = <selected/gps lat or null>`
-  - `longitude = <selected/gps lng or null>`
-- Toast success, close dialog, refresh card.
-- This is the same row Cart already reads, so the cart's "Delivery Address" + "GPS saved" will reflect it immediately.
-
-### 4. Remove Address
-- Confirms via simple `confirm()` (or AlertDialog if we want to stay consistent with shadcn — use AlertDialog).
-- Sets `business_address`, `latitude`, `longitude` to `null` on the profile.
-
-## UX notes
-- Match existing earth-tone styling (Card, Button, Dialog, Textarea, Input from shadcn).
-- Always include `DialogDescription` to silence the existing a11y warning seen in console logs.
-- Mobile: full-width buttons, dialog `sm:max-w-md`.
-
-## Technical details
-
-Files to change:
-- `src/pages/customer/Profile.tsx` — replace the placeholder block.
-
-New file:
-- `src/components/customer/AddressManager.tsx` — encapsulates the saved-address card + edit dialog + search + GPS.
-
-State inside `AddressManager`:
-```text
-loading, savedAddress, savedLat, savedLng
-dialogOpen, editAddress, editLat, editLng
-searchQuery, searching, results
-gpsLoading, removeOpen
+```json
+[
+  { "name": "Chicken Biriyani", "image_url": "https://…/biriyani.jpg", "price": 180 },
+  { "name": "Beef Fry",          "image_url": "https://…/beef.jpg",     "price": 140 }
+]
 ```
 
-Data layer:
-- Read: `supabase.from('profiles').select('business_address, latitude, longitude').eq('user_id', user.id).maybeSingle()`
-- Update: `.update({ business_address, latitude, longitude }).eq('user_id', user.id)`
+Only `name` and `image_url` are required; `price` is optional.
 
-Geocoding (no key, no backend needed):
-- Search: `GET https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=in&q=<encoded>`
-- Reverse: `GET https://nominatim.openstreetmap.org/reverse?format=json&lat=<lat>&lon=<lng>`
-- Debounce search via `setTimeout` cleared in effect; abort the previous fetch with `AbortController`.
+---
 
-No DB migration is required — `profiles.business_address`, `latitude`, `longitude` already exist and are already used by Cart.
+## 2. Edge function: `pennycarbs-items`
 
-No new secrets, no edge function, no backend work.
+Create `supabase/functions/pennycarbs-items/index.ts` (public, `verify_jwt = false`) that:
 
-## Out of scope
-- Multiple saved addresses (Home / Work). Current data model holds one delivery address per profile; matches Cart. We can add a separate `customer_addresses` table later if the user wants multiple.
+- Reads the three `app_settings` rows above using the service role.
+- If `pennycarbs_banner_enabled !== 'true'` or URL missing → returns `{ enabled: false, items: [] }`.
+- Fetches `pennycarbs_items_api_url`, attaching `Authorization: Bearer <key>` if a key is set.
+- Normalizes the response to `{ name, image_url, price? }[]`, drops items missing `image_url`.
+- Caches the response in-memory for ~5 minutes via a simple module-level timestamp to keep the homepage fast.
+- Returns `{ enabled: true, items: [...] }` with proper CORS headers.
+
+Why an edge function: avoids CORS issues calling penny-carbs.vercel.app from the browser, lets us safely use an API key, and centralizes normalization.
+
+---
+
+## 3. Remove the Food Delivery button
+
+In `src/components/PlatformSelector.tsx`, delete the middle `<button>` for `pennycarbs`. Keep Pennyekart and Services. No other call sites need changes — `Index.tsx` already handles only those two platforms in its switching logic.
+
+---
+
+## 4. New component: `CarbsBannerStrip`
+
+Create `src/components/CarbsBannerStrip.tsx`:
+
+- Uses `react-query` to call the `pennycarbs-items` edge function (`staleTime: 5 min`).
+- If `enabled === false` or `items.length === 0` → returns `null` (per the project's "hide empty UI components" rule).
+- Renders a single full-width horizontal card under the navbar:
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│ [carbs-logo]  Penny Carbs — Food Delivery        Order now → │
+│ ┌──────┐  Chicken Biriyani                              ₹180  │
+│ │ img  │  (image + name fade/slide every 3 s)                 │
+│ └──────┘                                                       │
+└───────────────────────────────────────────────────────────────┘
+```
+
+- Auto-rotates the active item every 3 seconds with a fade transition (`useEffect` + `setInterval`, cleared on unmount).
+- Shows small dot indicators below for the current item.
+- Whole card is clickable → `navigate('/pennycarbs')` (opens existing in-app iframe page, per your answer).
+- Styling: earth-tone palette (amber accent border, dark brown text), Playfair heading, DM Sans body, rounded-xl, soft shadow, full-bleed inside `.container`. Mobile: image left, text right, compact height (~80–96 px). Desktop: same row, larger image (~140 px tall).
+
+---
+
+## 5. Wire it into the homepage
+
+In `src/pages/Index.tsx`, render `<CarbsBannerStrip />` directly **after** the `<Navbar />` (and after `<PlatformSelector />` if that block stays above the fold) and **before** `<BannerCarousel />`. No other layout changes.
+
+Lite mode (`src/pages/LiteIndex.tsx`) is left untouched to keep it lightweight.
+
+---
+
+## Files touched
+
+| File | Change |
+|---|---|
+| `src/components/PlatformSelector.tsx` | Remove Food Delivery button |
+| `src/pages/admin/AppSettingsPage.tsx` | Add Penny Carbs API card (URL, key, enabled toggle) |
+| `supabase/functions/pennycarbs-items/index.ts` | **New** edge function |
+| `src/components/CarbsBannerStrip.tsx` | **New** auto-rotating banner |
+| `src/pages/Index.tsx` | Render banner under navbar |
+
+No DB migrations needed (uses existing `app_settings` table). No new secrets needed (the Penny Carbs key is admin-managed via the settings UI).
+
+---
+
+## Open assumption
+
+The banner pulls items from a JSON endpoint that **the Penny Carbs site needs to expose**. If that endpoint doesn't exist yet, the banner will simply stay hidden until you (a) add the endpoint there and (b) paste its URL into `/admin/settings`. If you'd rather I scrape the live site (no endpoint required) using Firecrawl, say so and I'll swap the edge function implementation — everything else stays the same.
