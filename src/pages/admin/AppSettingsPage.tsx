@@ -237,6 +237,68 @@ const AppSettingsPage = () => {
           </CardContent>
         </Card>
 
+        {/* Penny Carbs Items API */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <Utensils className="h-6 w-6 text-accent" />
+              <div>
+                <CardTitle>Penny Carbs — Food Items API</CardTitle>
+                <CardDescription>
+                  Configure the API that powers the auto-rotating food banner shown below the navbar on the customer homepage.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <Label className="text-sm font-medium">Show banner on homepage</Label>
+                    <p className="text-xs text-muted-foreground">Hides automatically when no items are returned.</p>
+                  </div>
+                  <Switch checked={carbsBannerEnabled} onCheckedChange={setCarbsBannerEnabled} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="carbsApiUrl">Items API URL</Label>
+                  <Input
+                    id="carbsApiUrl"
+                    type="url"
+                    placeholder="https://penny-carbs.vercel.app/api/featured-items"
+                    value={carbsApiUrl}
+                    onChange={(e) => setCarbsApiUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Endpoint must return JSON: <code className="rounded bg-muted px-1">[{`{ "name", "image_url", "price?" }`}]</code> (or <code className="rounded bg-muted px-1">{`{ items: [...] }`}</code>).
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="carbsApiKey">API Key (optional)</Label>
+                  <Input
+                    id="carbsApiKey"
+                    type="password"
+                    placeholder="Sent as Authorization: Bearer …"
+                    value={carbsApiKey}
+                    onChange={(e) => setCarbsApiKey(e.target.value)}
+                  />
+                </div>
+
+                <Button onClick={handleSaveCarbsApi} disabled={savingCarbsApi}>
+                  {savingCarbsApi ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Save API Settings
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
         {/* App Downloads */}
         <Card>
           <CardHeader>
