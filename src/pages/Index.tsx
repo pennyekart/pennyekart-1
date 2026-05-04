@@ -4,6 +4,7 @@ import PlatformSelector from "@/components/PlatformSelector";
 import SearchBar from "@/components/SearchBar";
 import CategoryBar from "@/components/CategoryBar";
 import BannerCarousel from "@/components/BannerCarousel";
+import CarbsBannerStrip from "@/components/CarbsBannerStrip";
 import GroceryCategories from "@/components/GroceryCategories";
 import ProductRow from "@/components/ProductRow";
 import MobileBottomNav from "@/components/MobileBottomNav";
@@ -263,6 +264,7 @@ const Index = () => {
 
       <main className="relative z-0 space-y-2">
         <CartReminderBanner />
+        <CarbsBannerStrip />
         <FlashSaleBanner />
         <CategoryBar onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
         <SortFilterBar selected={sortBy} onChange={setSortBy} />
