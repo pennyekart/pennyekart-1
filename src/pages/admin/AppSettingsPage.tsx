@@ -139,6 +139,41 @@ const AppSettingsPage = () => {
     }
   };
 
+  const upsertSetting = async (key: string, value: string | null, description?: string) => {
+    const { data: existing } = await supabase
+      .from("app_settings")
+      .select("id")
+      .eq("key", key)
+      .maybeSingle();
+    if (existing) {
+      const { error } = await supabase.from("app_settings").update({ value }).eq("key", key);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("app_settings")
+        .insert({ key, value, description: description ?? key });
+      if (error) throw error;
+    }
+  };
+
+  const handleSaveCarbsApi = async () => {
+    setSavingCarbsApi(true);
+    try {
+      await upsertSetting("pennycarbs_items_api_url", carbsApiUrl.trim(), "Penny Carbs items API URL");
+      await upsertSetting("pennycarbs_api_key", carbsApiKey.trim(), "Penny Carbs items API key");
+      await upsertSetting(
+        "pennycarbs_banner_enabled",
+        carbsBannerEnabled ? "true" : "false",
+        "Show Penny Carbs banner on homepage"
+      );
+      toast({ title: "Penny Carbs API settings saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingCarbsApi(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <h1 className="mb-6 text-2xl font-bold">App Settings</h1>
