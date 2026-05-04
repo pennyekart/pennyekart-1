@@ -6,12 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, ExternalLink, Upload, Smartphone, X, Apple } from "lucide-react";
+import { Loader2, Save, ExternalLink, Upload, Smartphone, X, Apple, Utensils } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import carbsLogo from "@/assets/carbs-logo.png";
 
 const AppSettingsPage = () => {
   const { toast } = useToast();
   const [carbsUrl, setCarbsUrl] = useState("");
+  const [carbsApiUrl, setCarbsApiUrl] = useState("");
+  const [carbsApiKey, setCarbsApiKey] = useState("");
+  const [carbsBannerEnabled, setCarbsBannerEnabled] = useState(false);
+  const [savingCarbsApi, setSavingCarbsApi] = useState(false);
   const [androidUrl, setAndroidUrl] = useState("");
   const [iosUrl, setIosUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,12 +31,22 @@ const AppSettingsPage = () => {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["pennycarbs_url", "android_app_url", "ios_app_url"]);
+        .in("key", [
+          "pennycarbs_url",
+          "android_app_url",
+          "ios_app_url",
+          "pennycarbs_items_api_url",
+          "pennycarbs_api_key",
+          "pennycarbs_banner_enabled",
+        ]);
       
       data?.forEach((row) => {
         if (row.key === "pennycarbs_url") setCarbsUrl(row.value ?? "");
         if (row.key === "android_app_url") setAndroidUrl(row.value ?? "");
         if (row.key === "ios_app_url") setIosUrl(row.value ?? "");
+        if (row.key === "pennycarbs_items_api_url") setCarbsApiUrl(row.value ?? "");
+        if (row.key === "pennycarbs_api_key") setCarbsApiKey(row.value ?? "");
+        if (row.key === "pennycarbs_banner_enabled") setCarbsBannerEnabled(row.value === "true");
       });
       setLoading(false);
     };
