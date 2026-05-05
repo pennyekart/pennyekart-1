@@ -17,6 +17,12 @@ const AppSettingsPage = () => {
   const [carbsApiKey, setCarbsApiKey] = useState("");
   const [carbsBannerEnabled, setCarbsBannerEnabled] = useState(false);
   const [savingCarbsApi, setSavingCarbsApi] = useState(false);
+  const [carbsSupabaseUrl, setCarbsSupabaseUrl] = useState("");
+  const [carbsTable, setCarbsTable] = useState("products");
+  const [carbsNameCol, setCarbsNameCol] = useState("name");
+  const [carbsImageCol, setCarbsImageCol] = useState("image_url");
+  const [carbsPriceCol, setCarbsPriceCol] = useState("price");
+  const [carbsLimit, setCarbsLimit] = useState("8");
   const [androidUrl, setAndroidUrl] = useState("");
   const [iosUrl, setIosUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,6 +44,12 @@ const AppSettingsPage = () => {
           "pennycarbs_items_api_url",
           "pennycarbs_api_key",
           "pennycarbs_banner_enabled",
+          "pennycarbs_supabase_url",
+          "pennycarbs_table",
+          "pennycarbs_name_col",
+          "pennycarbs_image_col",
+          "pennycarbs_price_col",
+          "pennycarbs_limit",
         ]);
       
       data?.forEach((row) => {
@@ -47,6 +59,12 @@ const AppSettingsPage = () => {
         if (row.key === "pennycarbs_items_api_url") setCarbsApiUrl(row.value ?? "");
         if (row.key === "pennycarbs_api_key") setCarbsApiKey(row.value ?? "");
         if (row.key === "pennycarbs_banner_enabled") setCarbsBannerEnabled(row.value === "true");
+        if (row.key === "pennycarbs_supabase_url") setCarbsSupabaseUrl(row.value ?? "");
+        if (row.key === "pennycarbs_table" && row.value) setCarbsTable(row.value);
+        if (row.key === "pennycarbs_name_col" && row.value) setCarbsNameCol(row.value);
+        if (row.key === "pennycarbs_image_col" && row.value) setCarbsImageCol(row.value);
+        if (row.key === "pennycarbs_price_col" && row.value) setCarbsPriceCol(row.value);
+        if (row.key === "pennycarbs_limit" && row.value) setCarbsLimit(row.value);
       });
       setLoading(false);
     };
@@ -166,6 +184,12 @@ const AppSettingsPage = () => {
         carbsBannerEnabled ? "true" : "false",
         "Show Penny Carbs banner on homepage"
       );
+      await upsertSetting("pennycarbs_supabase_url", carbsSupabaseUrl.trim(), "Penny Carbs Supabase project URL");
+      await upsertSetting("pennycarbs_table", carbsTable.trim() || "products", "Penny Carbs items table name");
+      await upsertSetting("pennycarbs_name_col", carbsNameCol.trim() || "name", "Penny Carbs name column");
+      await upsertSetting("pennycarbs_image_col", carbsImageCol.trim() || "image_url", "Penny Carbs image column");
+      await upsertSetting("pennycarbs_price_col", carbsPriceCol.trim() || "price", "Penny Carbs price column");
+      await upsertSetting("pennycarbs_limit", carbsLimit.trim() || "8", "Penny Carbs items max count");
       toast({ title: "Penny Carbs API settings saved" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -275,19 +299,57 @@ const AppSettingsPage = () => {
                     onChange={(e) => setCarbsApiUrl(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Endpoint must return JSON: <code className="rounded bg-muted px-1">[{`{ "name", "image_url", "price?" }`}]</code> (or <code className="rounded bg-muted px-1">{`{ items: [...] }`}</code>).
+                    Optional. If set, this custom endpoint is used and the Supabase config below is ignored. Must return <code className="rounded bg-muted px-1">[{`{ name, image_url, price? }`}]</code>.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="carbsApiKey">API Key (optional)</Label>
+                  <Label htmlFor="carbsApiKey">API Key / Supabase publishable key</Label>
                   <Input
                     id="carbsApiKey"
                     type="password"
-                    placeholder="Sent as Authorization: Bearer …"
+                    placeholder="sb_publishable_… or your bearer token"
                     value={carbsApiKey}
                     onChange={(e) => setCarbsApiKey(e.target.value)}
                   />
+                </div>
+
+                <div className="rounded-md border border-dashed p-3 space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Supabase source (used when no custom URL is set above)
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="carbsSupabaseUrl">Penny Carbs Supabase URL</Label>
+                    <Input
+                      id="carbsSupabaseUrl"
+                      type="url"
+                      placeholder="https://xxxxxx.supabase.co"
+                      value={carbsSupabaseUrl}
+                      onChange={(e) => setCarbsSupabaseUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="carbsTable" className="text-xs">Table</Label>
+                      <Input id="carbsTable" value={carbsTable} onChange={(e) => setCarbsTable(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="carbsLimit" className="text-xs">Max items</Label>
+                      <Input id="carbsLimit" type="number" value={carbsLimit} onChange={(e) => setCarbsLimit(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="carbsNameCol" className="text-xs">Name column</Label>
+                      <Input id="carbsNameCol" value={carbsNameCol} onChange={(e) => setCarbsNameCol(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="carbsImageCol" className="text-xs">Image column</Label>
+                      <Input id="carbsImageCol" value={carbsImageCol} onChange={(e) => setCarbsImageCol(e.target.value)} />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label htmlFor="carbsPriceCol" className="text-xs">Price column (optional)</Label>
+                      <Input id="carbsPriceCol" value={carbsPriceCol} onChange={(e) => setCarbsPriceCol(e.target.value)} />
+                    </div>
+                  </div>
                 </div>
 
                 <Button onClick={handleSaveCarbsApi} disabled={savingCarbsApi}>

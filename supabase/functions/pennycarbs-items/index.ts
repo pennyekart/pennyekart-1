@@ -60,6 +60,12 @@ Deno.serve(async (req) => {
         "pennycarbs_items_api_url",
         "pennycarbs_api_key",
         "pennycarbs_banner_enabled",
+        "pennycarbs_supabase_url",
+        "pennycarbs_table",
+        "pennycarbs_name_col",
+        "pennycarbs_image_col",
+        "pennycarbs_price_col",
+        "pennycarbs_limit",
       ]);
 
     const map = new Map<string, string>();
@@ -68,8 +74,14 @@ Deno.serve(async (req) => {
     const enabled = map.get("pennycarbs_banner_enabled") === "true";
     const url = map.get("pennycarbs_items_api_url") ?? "";
     const apiKey = map.get("pennycarbs_api_key") ?? "";
+    const sbUrl = map.get("pennycarbs_supabase_url") ?? "";
+    const table = map.get("pennycarbs_table") || "products";
+    const nameCol = map.get("pennycarbs_name_col") || "name";
+    const imageCol = map.get("pennycarbs_image_col") || "image_url";
+    const priceCol = map.get("pennycarbs_price_col") || "price";
+    const limit = parseInt(map.get("pennycarbs_limit") || "8", 10) || 8;
 
-    if (!enabled || !url) {
+    if (!enabled || (!url && !sbUrl)) {
       const payload = { enabled: false, items: [] as CarbItem[] };
       cache = { at: Date.now(), payload };
       return new Response(JSON.stringify(payload), {
@@ -77,17 +89,52 @@ Deno.serve(async (req) => {
       });
     }
 
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
-    const resp = await fetch(url, { headers });
     let items: CarbItem[] = [];
-    if (resp.ok) {
-      const json = await resp.json().catch(() => null);
-      items = normalize(json);
+    let errorMsg: string | undefined;
+
+    if (url) {
+      // Custom endpoint mode
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const resp = await fetch(url, { headers });
+      if (resp.ok) {
+        const json = await resp.json().catch(() => null);
+        items = normalize(json);
+      } else {
+        errorMsg = `Custom URL fetch failed: ${resp.status}`;
+      }
+    } else if (sbUrl && apiKey) {
+      // Supabase REST mode
+      const cols = [nameCol, imageCol, priceCol].filter(Boolean).join(",");
+      const restUrl = `${sbUrl.replace(/\/$/, "")}/rest/v1/${encodeURIComponent(table)}?select=${cols}&limit=${limit}`;
+      const resp = await fetch(restUrl, {
+        headers: {
+          Accept: "application/json",
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+      if (resp.ok) {
+        const rows = (await resp.json().catch(() => [])) as any[];
+        items = (Array.isArray(rows) ? rows : []).map((r) => {
+          const priceRaw = r?.[priceCol];
+          const priceNum = typeof priceRaw === "number" ? priceRaw : Number(priceRaw);
+          return {
+            name: String(r?.[nameCol] ?? "").trim(),
+            image_url: String(r?.[imageCol] ?? "").trim(),
+            price: Number.isFinite(priceNum) ? priceNum : undefined,
+          };
+        }).filter((it) => it.name && it.image_url);
+      } else {
+        const text = await resp.text().catch(() => "");
+        errorMsg = `Supabase REST ${resp.status}: ${text.slice(0, 200)}`;
+      }
+    } else {
+      errorMsg = "Missing Supabase URL or API key";
     }
 
-    const payload = { enabled: true, items };
+    const payload: any = { enabled: true, items };
+    if (errorMsg) payload.error = errorMsg;
     cache = { at: Date.now(), payload };
     return new Response(JSON.stringify(payload), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
