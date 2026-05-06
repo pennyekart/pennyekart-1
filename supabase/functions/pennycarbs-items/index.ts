@@ -75,11 +75,18 @@ Deno.serve(async (req) => {
     const url = map.get("pennycarbs_items_api_url") ?? "";
     const apiKey = map.get("pennycarbs_api_key") ?? "";
     const sbUrl = map.get("pennycarbs_supabase_url") ?? "";
-    const table = map.get("pennycarbs_table") || "products";
+    const table = map.get("pennycarbs_table") || "food_items";
     const nameCol = map.get("pennycarbs_name_col") || "name";
     const imageCol = map.get("pennycarbs_image_col") || "image_url";
     const priceCol = map.get("pennycarbs_price_col") || "price";
     const limit = parseInt(map.get("pennycarbs_limit") || "8", 10) || 8;
+    const imagesTable = map.has("pennycarbs_images_table")
+      ? (map.get("pennycarbs_images_table") || "")
+      : "food_item_images";
+    const imagesFk = map.get("pennycarbs_images_fk") || "food_item_id";
+    const availableCol = map.has("pennycarbs_available_col")
+      ? (map.get("pennycarbs_available_col") || "")
+      : "is_available";
 
     if (!enabled || (!url && !sbUrl)) {
       const payload = { enabled: false, items: [] as CarbItem[] };
@@ -105,8 +112,18 @@ Deno.serve(async (req) => {
       }
     } else if (sbUrl && apiKey) {
       // Supabase REST mode
-      const cols = [nameCol, imageCol, priceCol].filter(Boolean).join(",");
-      const restUrl = `${sbUrl.replace(/\/$/, "")}/rest/v1/${encodeURIComponent(table)}?select=${cols}&limit=${limit}`;
+      const baseCols = [nameCol, priceCol].filter(Boolean);
+      let select: string;
+      if (imagesTable) {
+        select = `${baseCols.join(",")},${imagesTable}(${imageCol},is_primary)`;
+      } else {
+        select = [...baseCols, imageCol].filter(Boolean).join(",");
+      }
+      const params = new URLSearchParams();
+      params.set("select", select);
+      params.set("limit", String(limit));
+      if (availableCol) params.set(availableCol, "eq.true");
+      const restUrl = `${sbUrl.replace(/\/$/, "")}/rest/v1/${encodeURIComponent(table)}?${params.toString()}`;
       const resp = await fetch(restUrl, {
         headers: {
           Accept: "application/json",
@@ -119,9 +136,19 @@ Deno.serve(async (req) => {
         items = (Array.isArray(rows) ? rows : []).map((r) => {
           const priceRaw = r?.[priceCol];
           const priceNum = typeof priceRaw === "number" ? priceRaw : Number(priceRaw);
+          let image = "";
+          if (imagesTable) {
+            const imgs = r?.[imagesTable];
+            if (Array.isArray(imgs) && imgs.length > 0) {
+              const primary = imgs.find((i: any) => i?.is_primary) ?? imgs[0];
+              image = String(primary?.[imageCol] ?? "").trim();
+            }
+          } else {
+            image = String(r?.[imageCol] ?? "").trim();
+          }
           return {
             name: String(r?.[nameCol] ?? "").trim(),
-            image_url: String(r?.[imageCol] ?? "").trim(),
+            image_url: image,
             price: Number.isFinite(priceNum) ? priceNum : undefined,
           };
         }).filter((it) => it.name && it.image_url);

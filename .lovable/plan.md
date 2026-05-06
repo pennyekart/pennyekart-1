@@ -1,54 +1,59 @@
-## Why the banner is empty
+## Problem
 
-`pennycarbs_items_api_url` in `app_settings` is blank. The edge function bails out and returns `{enabled:false, items:[]}` whenever the URL is missing, so `CarbsBannerStrip` renders `null`.
+The banner doesn't appear because the edge function is trying to query a `products` table with an `image_url` column on the Penny Carbs Supabase project — that table doesn't exist there.
 
-The value you pasted as "API key" is a **Supabase publishable key** (`sb_publishable_…`), which means Penny Carbs is a separate Supabase project. We need three pieces, not one URL, to query it.
+The actual Penny Carbs schema is:
+- Table: `food_items` (columns: `name`, `price`, `is_available`, …)
+- Images live in a separate table `food_item_images` joined by `food_item_id`, with `image_url` and `is_primary`
+
+I verified this works with the saved publishable key:
+```
+GET /rest/v1/food_items?select=name,price,food_item_images(image_url,is_primary)&is_available=eq.true&limit=8
+```
+returns 8 items with names, prices, and image URLs.
 
 ## Plan
 
-### 1. Admin settings — restructure the Penny Carbs card (`src/pages/admin/AppSettingsPage.tsx`)
+### 1. Update edge function `supabase/functions/pennycarbs-items/index.ts`
 
-Replace the single "Items API URL" field with fields tailored to a Supabase source:
+When `pennycarbs_supabase_url` + `pennycarbs_api_key` are set, build a smarter REST query:
 
-- **Penny Carbs Supabase URL** → `pennycarbs_supabase_url` (e.g. `https://xxxx.supabase.co`)
-- **Penny Carbs publishable key** → `pennycarbs_api_key` (already stored)
-- **Items table name** → `pennycarbs_table` (default `products`)
-- **Image column** → `pennycarbs_image_col` (default `image_url`)
-- **Name column** → `pennycarbs_name_col` (default `name`)
-- **Price column** → `pennycarbs_price_col` (default `price`, optional)
-- **Max items** → `pennycarbs_limit` (default `8`)
-- **Enabled toggle** → `pennycarbs_banner_enabled` (already stored)
+- New optional settings (with sensible defaults so user doesn't have to touch them):
+  - `pennycarbs_images_table` — default `food_item_images`
+  - `pennycarbs_images_fk` — default `food_item_id`
+  - `pennycarbs_image_col` — default `image_url`
+  - `pennycarbs_available_col` — default `is_available` (filter `eq.true`, skipped if blank)
+- Default `pennycarbs_table` → `food_items`
+- Default `pennycarbs_name_col` → `name`, `pennycarbs_price_col` → `price`
+- Build embedded select: `select={name},{price},{images_table}({image_col},is_primary)` and apply availability filter
+- Normalize each row: pick the `is_primary` image, else the first one. Items missing both name and image are dropped.
+- Keep the old single-table mode as a fallback when `pennycarbs_images_table` is explicitly set to empty string.
+- Always return `{ enabled, items, error? }`.
 
-Keep the legacy `pennycarbs_items_api_url` field as an optional override (if filled, it wins — same behavior as today).
+### 2. Update admin UI `src/pages/admin/AppSettingsPage.tsx`
 
-### 2. Edge function (`supabase/functions/pennycarbs-items/index.ts`)
+In the Penny Carbs card:
+- Change defaults shown in the inputs to `food_items` / `name` / `price`.
+- Add three new inputs (collapsed under an "Advanced" section):
+  - Images table (default `food_item_images`)
+  - Images foreign-key column (default `food_item_id`)
+  - Availability column (default `is_available`, blank = no filter)
+- Save them via the existing `upsertSetting` helper.
 
-Update logic:
-1. Read all `pennycarbs_*` settings.
-2. If `pennycarbs_items_api_url` is set → fetch it as before (back-compat).
-3. Else if `pennycarbs_supabase_url` + `pennycarbs_api_key` are set → call:
-   ```
-   GET {supabase_url}/rest/v1/{table}?select={name},{image},{price}&limit={n}
-   Headers: apikey: {key}, Authorization: Bearer {key}
-   ```
-4. Normalize rows using configured column names → `{ name, image_url, price? }[]`.
-5. Filter out rows missing name/image. Cache 5 min as today.
-6. On any error, return `{enabled:true, items:[]}` plus an `error` string for debugging.
+### 3. Backfill correct settings now
 
-### 3. Banner component — no changes
-`CarbsBannerStrip` already handles `items.length === 0` (renders nothing). Once the function returns items, it will appear.
+Insert/update the new keys in `app_settings` so the banner works immediately:
+- `pennycarbs_table` = `food_items`
+- `pennycarbs_images_table` = `food_item_images`
+- `pennycarbs_images_fk` = `food_item_id`
+- `pennycarbs_image_col` = `image_url`
+- `pennycarbs_available_col` = `is_available`
 
-### 4. Verification steps after build
-- Open `/admin/settings`, fill in Penny Carbs Supabase URL + publishable key + table/column names.
-- Hit "Save".
-- Reload `/`. The banner strip should appear under the navbar with auto-rotating items.
-- If still empty, call the edge function directly to inspect the `error` field.
+### 4. Verify
 
-## Open question
+After deploy, call the edge function via curl. Expect `enabled: true` and 8 items with valid `image_url`s. Then the homepage banner under the navbar should render and auto-rotate.
 
-I need the **Penny Carbs Supabase project URL** and **the table name** that holds the food items (and which columns store the image, name, price). If you don't know them off-hand, you can paste the URL and I can introspect via REST to suggest the table/columns.
+## Notes
 
-## Files touched
-
-- `src/pages/admin/AppSettingsPage.tsx` — expanded Penny Carbs card
-- `supabase/functions/pennycarbs-items/index.ts` — Supabase REST fallback + per-column normalization
+- No frontend banner component changes needed.
+- No DB schema changes on this project (only `app_settings` row updates, which is an existing table).
