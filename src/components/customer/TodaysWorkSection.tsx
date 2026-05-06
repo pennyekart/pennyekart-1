@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,18 @@ type WorkLog = {
 
 type Agent = { id: string; name: string; role: string; mobile: string };
 
+type DeptLog = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_role: string;
+  work_date: string;
+  work_details: string;
+  created_at: string;
+  updated_at: string;
+};
+type Department = { name: string; agent_count: number; log_count: number; logs: DeptLog[] };
+
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
 export const TodaysWorkSection = () => {
@@ -36,6 +49,8 @@ export const TodaysWorkSection = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [deptLoading, setDeptLoading] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const callFn = async (opts: { method: string; query?: Record<string, string>; body?: any }) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -79,6 +94,17 @@ export const TodaysWorkSection = () => {
       const r = await callFn({ method: "GET", query: { date: ymd(date) } });
       if (r.ok) setLogs(r.body.logs || []);
       setLoading(false);
+    })();
+  }, [date, agent?.id]);
+
+  useEffect(() => {
+    if (!agent) return;
+    (async () => {
+      setDeptLoading(true);
+      const r = await callFn({ method: "GET", query: { date: ymd(date), scope: "department" } });
+      if (r.ok) setDepartments(r.body.departments || []);
+      else toast.error(r.body?.error || "Failed to load department logs");
+      setDeptLoading(false);
     })();
   }, [date, agent?.id]);
 
@@ -237,6 +263,60 @@ export const TodaysWorkSection = () => {
             ))
           )}
         </div>
+      </CardContent>
+
+      <CardContent className="border-t pt-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-primary" />
+            Department Work Logs — വകുപ്പുകളുടെ വർക്ക് ലോഗ്
+          </h3>
+          <p className="text-xs text-muted-foreground">All Pennyekart agents' logs for {format(date, "PPP")}</p>
+        </div>
+
+        {deptLoading ? (
+          <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+        ) : departments.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-3">No departments found.</p>
+        ) : (
+          <Accordion type="multiple" className="w-full">
+            {departments.map((dept) => (
+              <AccordionItem key={dept.name} value={dept.name}>
+                <AccordionTrigger className="text-sm hover:no-underline">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium">{dept.name}</span>
+                    <Badge variant="secondary" className="text-[10px]">{dept.agent_count} agent{dept.agent_count === 1 ? "" : "s"}</Badge>
+                    <Badge variant="outline" className="text-[10px]">{dept.log_count} log{dept.log_count === 1 ? "" : "s"}</Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {dept.logs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">No logs for this date.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {dept.logs.map((log) => (
+                        <div key={log.id} className="rounded-lg border bg-muted/20 p-3 text-sm space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{log.agent_name}</span>
+                              {log.agent_role && (
+                                <Badge variant="secondary" className="text-[10px]">{log.agent_role}</Badge>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {format(new Date(log.created_at), "dd MMM • HH:mm")}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm">{log.work_details}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
       </CardContent>
     </Card>
   );
