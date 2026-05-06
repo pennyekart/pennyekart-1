@@ -71,6 +71,79 @@ serve(async (req) => {
     const url = new URL(req.url);
 
     if (req.method === "GET") {
+      // Department-wide read: all agents' logs grouped by department
+      if (url.searchParams.get("scope") === "department") {
+        const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
+        const deptCol = await detectDepartmentColumn(elifeUrl, elifeHeaders);
+
+        // Fetch all agents (cap at 1000)
+        const agentSelect = ["id", "name", "role", "mobile"];
+        if (deptCol) agentSelect.push(deptCol);
+        const aRes = await fetch(
+          `${elifeUrl}/rest/v1/pennyekart_agents?select=${agentSelect.join(",")}&limit=1000`,
+          { headers: elifeHeaders },
+        );
+        if (!aRes.ok) return json(502, { error: "agents fetch failed", details: await aRes.text() });
+        const allAgents: any[] = await aRes.json();
+
+        // Fetch logs for the date
+        const lRes = await fetch(
+          `${elifeUrl}/rest/v1/agent_work_logs?work_date=eq.${date}&order=created_at.desc&limit=2000`,
+          { headers: elifeHeaders },
+        );
+        if (!lRes.ok) return json(502, { error: "logs fetch failed", details: await lRes.text() });
+        const logsRaw: any[] = await lRes.json();
+
+        const agentMap = new Map<string, any>();
+        for (const a of allAgents) agentMap.set(a.id, a);
+
+        const groups = new Map<string, { name: string; agents: Set<string>; logs: any[] }>();
+        for (const log of logsRaw) {
+          const a = agentMap.get(log.agent_id);
+          const deptVal = (deptCol && a?.[deptCol] != null && String(a[deptCol]).trim() !== "")
+            ? String(a[deptCol])
+            : "Unassigned";
+          if (!groups.has(deptVal)) groups.set(deptVal, { name: deptVal, agents: new Set(), logs: [] });
+          const g = groups.get(deptVal)!;
+          g.agents.add(log.agent_id);
+          g.logs.push({
+            id: log.id,
+            agent_id: log.agent_id,
+            agent_name: a?.name || "Unknown",
+            agent_role: a?.role || "",
+            work_date: log.work_date,
+            work_details: log.work_details,
+            created_at: log.created_at,
+            updated_at: log.updated_at,
+          });
+        }
+
+        // Also include departments with agents but no logs today (so feed shows structure)
+        if (deptCol) {
+          for (const a of allAgents) {
+            const deptVal = (a[deptCol] != null && String(a[deptCol]).trim() !== "")
+              ? String(a[deptCol])
+              : "Unassigned";
+            if (!groups.has(deptVal)) groups.set(deptVal, { name: deptVal, agents: new Set([a.id]), logs: [] });
+            else groups.get(deptVal)!.agents.add(a.id);
+          }
+        }
+
+        const departments = Array.from(groups.values())
+          .map((g) => ({ name: g.name, agent_count: g.agents.size, log_count: g.logs.length, logs: g.logs }))
+          .sort((a, b) => {
+            if (a.name === "Unassigned") return 1;
+            if (b.name === "Unassigned") return -1;
+            return a.name.localeCompare(b.name);
+          });
+
+        return json(200, {
+          department_column: deptCol,
+          date,
+          departments,
+        });
+      }
+
       // List logs for this agent, optionally filtered by date or month
       const date = url.searchParams.get("date"); // YYYY-MM-DD
       const month = url.searchParams.get("month"); // YYYY-MM
@@ -132,4 +205,27 @@ function nextMonth(ym: string) {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y, m, 1)); // m is 0-indexed → next month
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+let _deptColCache: string | null | undefined = undefined;
+async function detectDepartmentColumn(elifeUrl: string, headers: Record<string, string>): Promise<string | null> {
+  if (_deptColCache !== undefined) return _deptColCache;
+  try {
+    const r = await fetch(`${elifeUrl}/rest/v1/pennyekart_agents?limit=1`, { headers });
+    if (!r.ok) { _deptColCache = null; return null; }
+    const rows = await r.json();
+    const sample = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    if (!sample) { _deptColCache = null; return null; }
+    const keys = Object.keys(sample);
+    const priority = ["department_name", "department", "dept", "department_id", "team", "unit", "branch", "role"];
+    for (const p of priority) {
+      const hit = keys.find((k) => k.toLowerCase() === p);
+      if (hit) { _deptColCache = hit; return hit; }
+    }
+    _deptColCache = null;
+    return null;
+  } catch {
+    _deptColCache = null;
+    return null;
+  }
 }

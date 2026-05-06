@@ -1,59 +1,52 @@
-## Problem
+## Department Work Logs — Plan
 
-The banner doesn't appear because the edge function is trying to query a `products` table with an `image_url` column on the Penny Carbs Supabase project — that table doesn't exist there.
+Add a read-only "Department Work Logs" feed below the existing personal "Today's Work" editor on `/customer/profile`. Every Pennyekart agent sees all agents' logs (for the selected date) grouped by department. The edge function auto-detects which column on `pennyekart_agents` represents the department.
 
-The actual Penny Carbs schema is:
-- Table: `food_items` (columns: `name`, `price`, `is_available`, …)
-- Images live in a separate table `food_item_images` joined by `food_item_id`, with `image_url` and `is_primary`
+### 1. Edge function — extend `agent-work-logs`
 
-I verified this works with the saved publishable key:
-```
-GET /rest/v1/food_items?select=name,price,food_item_images(image_url,is_primary)&is_available=eq.true&limit=8
-```
-returns 8 items with names, prices, and image URLs.
+Add a new GET mode triggered by query param `scope=department`:
 
-## Plan
+- Auth + agent lookup unchanged (mobile → `pennyekart_agents`).
+- After confirming caller is an agent, auto-detect the "department" column once per request:
+  1. Fetch one row from `pennyekart_agents?limit=1` and inspect keys.
+  2. Pick the first key matching this priority list (case-insensitive):
+     `department_name`, `department`, `dept`, `department_id`, `team`, `unit`, `branch`, `role`.
+  3. Cache the detected key in module scope so subsequent calls skip detection.
+- Fetch all agents: `GET pennyekart_agents?select=id,name,role,mobile,<deptCol>` (paginate with `Range` if >1000).
+- Fetch logs for the date: `GET agent_work_logs?work_date=eq.<date>&order=created_at.desc` (also paginate if needed).
+- Group logs by `agent.<deptCol>` (fallback bucket: `"Unassigned"`), embedding agent name/role on each log.
+- Return: `{ department_column, departments: [{ name, agent_count, log_count, logs: [{id, agent_id, agent_name, agent_role, work_date, work_details, created_at, updated_at}] }] }`.
 
-### 1. Update edge function `supabase/functions/pennycarbs-items/index.ts`
+Existing personal endpoints (no `scope`) remain unchanged.
 
-When `pennycarbs_supabase_url` + `pennycarbs_api_key` are set, build a smarter REST query:
+### 2. Frontend — `src/components/customer/TodaysWorkSection.tsx`
 
-- New optional settings (with sensible defaults so user doesn't have to touch them):
-  - `pennycarbs_images_table` — default `food_item_images`
-  - `pennycarbs_images_fk` — default `food_item_id`
-  - `pennycarbs_image_col` — default `image_url`
-  - `pennycarbs_available_col` — default `is_available` (filter `eq.true`, skipped if blank)
-- Default `pennycarbs_table` → `food_items`
-- Default `pennycarbs_name_col` → `name`, `pennycarbs_price_col` → `price`
-- Build embedded select: `select={name},{price},{images_table}({image_col},is_primary)` and apply availability filter
-- Normalize each row: pick the `is_primary` image, else the first one. Items missing both name and image are dropped.
-- Keep the old single-table mode as a fallback when `pennycarbs_images_table` is explicitly set to empty string.
-- Always return `{ enabled, items, error? }`.
+Below the existing logs list, render a new collapsible section "Department Work Logs — വകുപ്പുകളുടെ വർക്ക് ലോഗ്":
 
-### 2. Update admin UI `src/pages/admin/AppSettingsPage.tsx`
+- Fetch via `callFn({ method: "GET", query: { date: ymd(date), scope: "department" } })` whenever `agent` or `date` changes.
+- Render an Accordion (shadcn `accordion.tsx`) with one item per department. Header shows department name + badge with `agent_count` and `log_count`.
+- Each accordion body lists the logs sorted by `created_at desc`, each card showing: agent name + role badge, time, and `work_details` (whitespace-pre-wrap). Read-only — no edit/delete buttons.
+- Empty state per department: "No logs for this date." Top-level empty state if no departments returned.
+- Light loading spinner while fetching; errors → toast.
+- Section is hidden if `notAgent` (same gating as the rest of the component).
 
-In the Penny Carbs card:
-- Change defaults shown in the inputs to `food_items` / `name` / `price`.
-- Add three new inputs (collapsed under an "Advanced" section):
-  - Images table (default `food_item_images`)
-  - Images foreign-key column (default `food_item_id`)
-  - Availability column (default `is_available`, blank = no filter)
-- Save them via the existing `upsertSetting` helper.
+### 3. Visual / UX details
 
-### 3. Backfill correct settings now
+- Section uses the existing `Card` patterns and earth-tone palette (no new colors).
+- Heading uses Playfair Display (inherited via `CardTitle`); body uses DM Sans.
+- Each log card matches the existing `rounded-lg border bg-muted/20 p-3` style.
+- Department headers ordered alphabetically, except `"Unassigned"` last.
 
-Insert/update the new keys in `app_settings` so the banner works immediately:
-- `pennycarbs_table` = `food_items`
-- `pennycarbs_images_table` = `food_item_images`
-- `pennycarbs_images_fk` = `food_item_id`
-- `pennycarbs_image_col` = `image_url`
-- `pennycarbs_available_col` = `is_available`
+### 4. Verification
 
-### 4. Verify
+After deploy:
+- `curl agent-work-logs?scope=department&date=YYYY-MM-DD` returns the grouped payload.
+- Profile page shows the new accordion under the personal log list.
+- Logs in different departments appear in their respective groups.
 
-After deploy, call the edge function via curl. Expect `enabled: true` and 8 items with valid `image_url`s. Then the homepage banner under the navbar should render and auto-rotate.
+### Files
 
-## Notes
+- edit `supabase/functions/agent-work-logs/index.ts` — add `scope=department` branch + column auto-detect + caching.
+- edit `src/components/customer/TodaysWorkSection.tsx` — fetch + render accordion grouped feed.
 
-- No frontend banner component changes needed.
-- No DB schema changes on this project (only `app_settings` row updates, which is an existing table).
+No DB migrations or new secrets needed.
