@@ -24,17 +24,8 @@ type WorkLog = {
 
 type Agent = { id: string; name: string; role: string; mobile: string };
 
-type DeptLog = {
-  id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_role: string;
-  work_date: string;
-  work_details: string;
-  created_at: string;
-  updated_at: string;
-};
-type Department = { name: string; agent_count: number; log_count: number; logs: DeptLog[] };
+type DeptAgent = { id: string; name: string; role: string; mobile: string };
+type Department = { name: string; agent_count: number; present_count: number; absent_count: number; present_agents: DeptAgent[]; absent_agents: DeptAgent[] };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
