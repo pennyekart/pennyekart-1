@@ -75,12 +75,15 @@ serve(async (req) => {
       if (url.searchParams.get("scope") === "department") {
         const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
         const deptCol = await detectDepartmentColumn(elifeUrl, elifeHeaders);
+        const { panchayathCol, wardCol } = await detectLocationColumns(elifeUrl, elifeHeaders);
 
         // Fetch all agents (cap at 1000)
         const agentSelect = ["id", "name", "role", "mobile"];
         if (deptCol) agentSelect.push(deptCol);
+        if (panchayathCol) agentSelect.push(panchayathCol);
+        if (wardCol) agentSelect.push(wardCol);
         const aRes = await fetch(
-          `${elifeUrl}/rest/v1/pennyekart_agents?select=${agentSelect.join(",")}&limit=1000`,
+          `${elifeUrl}/rest/v1/pennyekart_agents?select=${[...new Set(agentSelect)].join(",")}&limit=1000`,
           { headers: elifeHeaders },
         );
         if (!aRes.ok) return json(502, { error: "agents fetch failed", details: await aRes.text() });
@@ -111,13 +114,21 @@ serve(async (req) => {
           .map((g) => {
             const present = g.agents.filter((a) => loggedAgentIds.has(a.id));
             const absent = g.agents.filter((a) => !loggedAgentIds.has(a.id));
+            const mapAgent = (a: any) => ({
+              id: a.id,
+              name: a.name,
+              role: a.role || "",
+              mobile: a.mobile || "",
+              panchayath: panchayathCol ? (a[panchayathCol] ?? "") : "",
+              ward: wardCol ? (a[wardCol] ?? "") : "",
+            });
             return {
               name: g.name,
               agent_count: g.agents.length,
               present_count: present.length,
               absent_count: absent.length,
-              present_agents: present.map((a) => ({ id: a.id, name: a.name, role: a.role || "", mobile: a.mobile || "" })),
-              absent_agents: absent.map((a) => ({ id: a.id, name: a.name, role: a.role || "", mobile: a.mobile || "" })),
+              present_agents: present.map(mapAgent),
+              absent_agents: absent.map(mapAgent),
             };
           })
           .sort((a, b) => {
@@ -128,6 +139,8 @@ serve(async (req) => {
 
         return json(200, {
           department_column: deptCol,
+          panchayath_column: panchayathCol,
+          ward_column: wardCol,
           date,
           departments,
         });
@@ -216,5 +229,32 @@ async function detectDepartmentColumn(elifeUrl: string, headers: Record<string, 
   } catch {
     _deptColCache = null;
     return null;
+  }
+}
+
+let _locColCache: { panchayathCol: string | null; wardCol: string | null } | undefined = undefined;
+async function detectLocationColumns(elifeUrl: string, headers: Record<string, string>): Promise<{ panchayathCol: string | null; wardCol: string | null }> {
+  if (_locColCache !== undefined) return _locColCache;
+  try {
+    const r = await fetch(`${elifeUrl}/rest/v1/pennyekart_agents?limit=1`, { headers });
+    if (!r.ok) { _locColCache = { panchayathCol: null, wardCol: null }; return _locColCache; }
+    const rows = await r.json();
+    const sample = Array.isArray(rows) && rows[0] ? rows[0] : null;
+    if (!sample) { _locColCache = { panchayathCol: null, wardCol: null }; return _locColCache; }
+    const keys = Object.keys(sample);
+    const pPriority = ["panchayath_name", "panchayath", "panchayat", "local_body_name", "local_body", "localbody", "lsg", "village", "town"];
+    const wPriority = ["ward_name", "ward_number", "ward_no", "ward", "wardno"];
+    const findKey = (priority: string[]) => {
+      for (const p of priority) {
+        const hit = keys.find((k) => k.toLowerCase() === p);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    _locColCache = { panchayathCol: findKey(pPriority), wardCol: findKey(wPriority) };
+    return _locColCache;
+  } catch {
+    _locColCache = { panchayathCol: null, wardCol: null };
+    return _locColCache;
   }
 }

@@ -9,6 +9,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -25,7 +27,7 @@ type WorkLog = {
 
 type Agent = { id: string; name: string; role: string; mobile: string };
 
-type DeptAgent = { id: string; name: string; role: string; mobile: string };
+type DeptAgent = { id: string; name: string; role: string; mobile: string; panchayath?: string; ward?: string | number };
 type Department = { name: string; agent_count: number; present_count: number; absent_count: number; present_agents: DeptAgent[]; absent_agents: DeptAgent[] };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
@@ -44,6 +46,9 @@ export const TodaysWorkSection = () => {
   const [editingText, setEditingText] = useState("");
   const [deptLoading, setDeptLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [panchayathFilter, setPanchayathFilter] = useState<string>("all");
+  const [wardFilter, setWardFilter] = useState<string>("");
+  const [nameFilter, setNameFilter] = useState<string>("");
 
   const canViewAbsent = useMemo(() => {
     const allowed = ["scode", "s_code", "team_leader", "teamleader", "team-lead", "admin", "super_admin", "superadmin"];
@@ -110,6 +115,34 @@ export const TodaysWorkSection = () => {
   }, [date, agent?.id, canViewAbsent]);
 
   const isToday = useMemo(() => ymd(date) === ymd(new Date()), [date]);
+
+  const panchayathOptions = useMemo(() => {
+    const set = new Set<string>();
+    departments.forEach((d) => d.absent_agents.forEach((a) => {
+      const p = (a.panchayath ?? "").toString().trim();
+      if (p) set.add(p);
+    }));
+    return Array.from(set).sort();
+  }, [departments]);
+
+  const filteredDepartments = useMemo(() => {
+    const wf = wardFilter.trim().toLowerCase();
+    const nf = nameFilter.trim().toLowerCase();
+    return departments
+      .map((d) => {
+        const absent = d.absent_agents.filter((a) => {
+          const p = (a.panchayath ?? "").toString().trim();
+          const w = (a.ward ?? "").toString().trim().toLowerCase();
+          const n = (a.name ?? "").toString().toLowerCase();
+          if (panchayathFilter !== "all" && p !== panchayathFilter) return false;
+          if (wf && !w.includes(wf)) return false;
+          if (nf && !n.includes(nf) && !(a.mobile || "").toLowerCase().includes(nf)) return false;
+          return true;
+        });
+        return { ...d, absent_agents: absent, absent_count: absent.length };
+      })
+      .filter((d) => d.absent_agents.length > 0 || (panchayathFilter === "all" && !wf && !nf));
+  }, [departments, panchayathFilter, wardFilter, nameFilter]);
 
   const handleAdd = async () => {
     if (!draft.trim()) return;
@@ -281,8 +314,34 @@ export const TodaysWorkSection = () => {
         ) : departments.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-3">No departments found.</p>
         ) : (
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Select value={panchayathFilter} onValueChange={setPanchayathFilter}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder="All panchayaths" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All panchayaths</SelectItem>
+                {panchayathOptions.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={wardFilter}
+              onChange={(e) => setWardFilter(e.target.value)}
+              placeholder="Ward filter"
+              className="h-9 text-xs"
+            />
+            <Input
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Search name / mobile"
+              className="h-9 text-xs"
+            />
+          </div>
           <Accordion type="multiple" className="w-full">
-            {departments.map((dept) => (
+            {filteredDepartments.map((dept) => (
               <AccordionItem key={dept.name} value={dept.name}>
                 <AccordionTrigger className="text-sm hover:no-underline">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -300,15 +359,27 @@ export const TodaysWorkSection = () => {
                   ) : (
                     <div className="space-y-2">
                       {dept.absent_agents.map((a) => (
-                        <div key={a.id} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <UserX className="h-4 w-4 text-destructive" />
-                            <span className="font-medium">{a.name}</span>
-                            {a.role && (
-                              <Badge variant="secondary" className="text-[10px]">{a.role}</Badge>
-                            )}
+                        <div key={a.id} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <UserX className="h-4 w-4 text-destructive" />
+                              <span className="font-medium">{a.name}</span>
+                              {a.role && (
+                                <Badge variant="secondary" className="text-[10px]">{a.role}</Badge>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">{a.mobile}</span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground">{a.mobile}</span>
+                          {(a.panchayath || a.ward) && (
+                            <div className="flex items-center gap-2 flex-wrap pl-6">
+                              {a.panchayath && (
+                                <Badge variant="outline" className="text-[10px]">📍 {a.panchayath}</Badge>
+                              )}
+                              {a.ward !== undefined && a.ward !== "" && (
+                                <Badge variant="outline" className="text-[10px]">Ward {a.ward}</Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -317,6 +388,7 @@ export const TodaysWorkSection = () => {
               </AccordionItem>
             ))}
           </Accordion>
+          </>
         )}
       </CardContent>
       )}
