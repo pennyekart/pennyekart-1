@@ -12,6 +12,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 type WorkLog = {
   id: string;
@@ -30,6 +31,7 @@ type Department = { name: string; agent_count: number; present_count: number; ab
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
 export const TodaysWorkSection = () => {
+  const { profile } = useAuth();
   const [checking, setChecking] = useState(true);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [notAgent, setNotAgent] = useState(false);
@@ -42,6 +44,14 @@ export const TodaysWorkSection = () => {
   const [editingText, setEditingText] = useState("");
   const [deptLoading, setDeptLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
+
+  const canViewAbsent = useMemo(() => {
+    const allowed = ["scode", "s_code", "team_leader", "teamleader", "team-lead", "admin", "super_admin", "superadmin"];
+    const norm = (s?: string | null) => (s || "").toLowerCase().replace(/\s+/g, "_");
+    if (profile?.is_super_admin) return true;
+    if (allowed.includes(norm(agent?.role))) return true;
+    return false;
+  }, [agent?.role, profile?.is_super_admin]);
 
   const callFn = async (opts: { method: string; query?: Record<string, string>; body?: any }) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -89,7 +99,7 @@ export const TodaysWorkSection = () => {
   }, [date, agent?.id]);
 
   useEffect(() => {
-    if (!agent) return;
+    if (!agent || !canViewAbsent) return;
     (async () => {
       setDeptLoading(true);
       const r = await callFn({ method: "GET", query: { date: ymd(date), scope: "department" } });
@@ -97,7 +107,7 @@ export const TodaysWorkSection = () => {
       else toast.error(r.body?.error || "Failed to load department logs");
       setDeptLoading(false);
     })();
-  }, [date, agent?.id]);
+  }, [date, agent?.id, canViewAbsent]);
 
   const isToday = useMemo(() => ymd(date) === ymd(new Date()), [date]);
 
@@ -256,6 +266,7 @@ export const TodaysWorkSection = () => {
         </div>
       </CardContent>
 
+      {canViewAbsent && (
       <CardContent className="border-t pt-4 space-y-3">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -308,6 +319,7 @@ export const TodaysWorkSection = () => {
           </Accordion>
         )}
       </CardContent>
+      )}
     </Card>
   );
 };
