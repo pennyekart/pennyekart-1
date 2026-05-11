@@ -71,7 +71,7 @@ serve(async (req) => {
     const url = new URL(req.url);
 
     if (req.method === "GET") {
-      // Department-wide read: all agents' logs grouped by department
+      // Department-wide read: all agents' absence grouped by department
       if (url.searchParams.get("scope") === "department") {
         const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
         const deptCol = await detectDepartmentColumn(elifeUrl, elifeHeaders);
@@ -88,49 +88,38 @@ serve(async (req) => {
 
         // Fetch logs for the date
         const lRes = await fetch(
-          `${elifeUrl}/rest/v1/agent_work_logs?work_date=eq.${date}&order=created_at.desc&limit=2000`,
+          `${elifeUrl}/rest/v1/agent_work_logs?work_date=eq.${date}&select=agent_id&limit=2000`,
           { headers: elifeHeaders },
         );
         if (!lRes.ok) return json(502, { error: "logs fetch failed", details: await lRes.text() });
         const logsRaw: any[] = await lRes.json();
 
-        const agentMap = new Map<string, any>();
-        for (const a of allAgents) agentMap.set(a.id, a);
+        const loggedAgentIds = new Set<string>(logsRaw.map((l) => l.agent_id));
 
-        const groups = new Map<string, { name: string; agents: Set<string>; logs: any[] }>();
-        for (const log of logsRaw) {
-          const a = agentMap.get(log.agent_id);
+        // Group all agents by department
+        const groups = new Map<string, { name: string; agents: any[] }>();
+        for (const a of allAgents) {
           const deptVal = (deptCol && a?.[deptCol] != null && String(a[deptCol]).trim() !== "")
             ? String(a[deptCol])
             : "Unassigned";
-          if (!groups.has(deptVal)) groups.set(deptVal, { name: deptVal, agents: new Set(), logs: [] });
-          const g = groups.get(deptVal)!;
-          g.agents.add(log.agent_id);
-          g.logs.push({
-            id: log.id,
-            agent_id: log.agent_id,
-            agent_name: a?.name || "Unknown",
-            agent_role: a?.role || "",
-            work_date: log.work_date,
-            work_details: log.work_details,
-            created_at: log.created_at,
-            updated_at: log.updated_at,
-          });
+          if (!groups.has(deptVal)) groups.set(deptVal, { name: deptVal, agents: [] });
+          groups.get(deptVal)!.agents.push(a);
         }
 
-        // Also include departments with agents but no logs today (so feed shows structure)
-        if (deptCol) {
-          for (const a of allAgents) {
-            const deptVal = (a[deptCol] != null && String(a[deptCol]).trim() !== "")
-              ? String(a[deptCol])
-              : "Unassigned";
-            if (!groups.has(deptVal)) groups.set(deptVal, { name: deptVal, agents: new Set([a.id]), logs: [] });
-            else groups.get(deptVal)!.agents.add(a.id);
-          }
-        }
-
+        // Build absent + present per department
         const departments = Array.from(groups.values())
-          .map((g) => ({ name: g.name, agent_count: g.agents.size, log_count: g.logs.length, logs: g.logs }))
+          .map((g) => {
+            const present = g.agents.filter((a) => loggedAgentIds.has(a.id));
+            const absent = g.agents.filter((a) => !loggedAgentIds.has(a.id));
+            return {
+              name: g.name,
+              agent_count: g.agents.length,
+              present_count: present.length,
+              absent_count: absent.length,
+              present_agents: present.map((a) => ({ id: a.id, name: a.name, role: a.role || "", mobile: a.mobile || "" })),
+              absent_agents: absent.map((a) => ({ id: a.id, name: a.name, role: a.role || "", mobile: a.mobile || "" })),
+            };
+          })
           .sort((a, b) => {
             if (a.name === "Unassigned") return 1;
             if (b.name === "Unassigned") return -1;
