@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, UserX, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
