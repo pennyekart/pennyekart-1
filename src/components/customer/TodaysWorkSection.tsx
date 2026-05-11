@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, UserX, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,17 +24,8 @@ type WorkLog = {
 
 type Agent = { id: string; name: string; role: string; mobile: string };
 
-type DeptLog = {
-  id: string;
-  agent_id: string;
-  agent_name: string;
-  agent_role: string;
-  work_date: string;
-  work_details: string;
-  created_at: string;
-  updated_at: string;
-};
-type Department = { name: string; agent_count: number; log_count: number; logs: DeptLog[] };
+type DeptAgent = { id: string; name: string; role: string; mobile: string };
+type Department = { name: string; agent_count: number; present_count: number; absent_count: number; present_agents: DeptAgent[]; absent_agents: DeptAgent[] };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -268,10 +259,10 @@ export const TodaysWorkSection = () => {
       <CardContent className="border-t pt-4 space-y-3">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-primary" />
-            Department Work Logs — വകുപ്പുകളുടെ വർക്ക് ലോഗ്
+            <UserX className="h-4 w-4 text-destructive" />
+            Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ
           </h3>
-          <p className="text-xs text-muted-foreground">All Pennyekart agents' logs for {format(date, "PPP")}</p>
+          <p className="text-xs text-muted-foreground">Agents who did not submit work log for {format(date, "PPP")}</p>
         </div>
 
         {deptLoading ? (
@@ -286,28 +277,27 @@ export const TodaysWorkSection = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium">{dept.name}</span>
                     <Badge variant="secondary" className="text-[10px]">{dept.agent_count} agent{dept.agent_count === 1 ? "" : "s"}</Badge>
-                    <Badge variant="outline" className="text-[10px]">{dept.log_count} log{dept.log_count === 1 ? "" : "s"}</Badge>
+                    <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700">{dept.present_count} present</Badge>
+                    <Badge variant="destructive" className="text-[10px]">{dept.absent_count} absent</Badge>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
-                  {dept.logs.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">No logs for this date.</p>
+                  {dept.absent_agents.length === 0 ? (
+                    <p className="text-xs text-green-600 py-2 flex items-center gap-1">
+                      <UserCheck className="h-3 w-3" /> All agents are present today.
+                    </p>
                   ) : (
                     <div className="space-y-2">
-                      {dept.logs.map((log) => (
-                        <div key={log.id} className="rounded-lg border bg-muted/20 p-3 text-sm space-y-1">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{log.agent_name}</span>
-                              {log.agent_role && (
-                                <Badge variant="secondary" className="text-[10px]">{log.agent_role}</Badge>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-muted-foreground">
-                              {format(new Date(log.created_at), "dd MMM • HH:mm")}
-                            </span>
+                      {dept.absent_agents.map((a) => (
+                        <div key={a.id} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <UserX className="h-4 w-4 text-destructive" />
+                            <span className="font-medium">{a.name}</span>
+                            {a.role && (
+                              <Badge variant="secondary" className="text-[10px]">{a.role}</Badge>
+                            )}
                           </div>
-                          <p className="whitespace-pre-wrap text-sm">{log.work_details}</p>
+                          <span className="text-[11px] text-muted-foreground">{a.mobile}</span>
                         </div>
                       ))}
                     </div>
