@@ -17,7 +17,7 @@ import { TodaysWorkSection } from "@/components/customer/TodaysWorkSection";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import NotificationDetailDialog from "@/components/NotificationDetailDialog";
-import AddressManager from "@/components/customer/AddressManager";
+import ScratchCardWidget from "@/components/ScratchCardWidget";
 
 interface Order {
   id: string;
@@ -423,6 +423,9 @@ const Profile = () => {
         {/* Today's Work — only renders for users matched as a Pennyekart agent in e-Life */}
         {activeSection === "profile" && <TodaysWorkSection />}
 
+        {/* Scratch & Win rewards */}
+        {activeSection === "profile" && <ScratchCardWidget className="px-0" />}
+
         {/* Orders Section */}
         {activeSection === "orders" && (
           <Tabs defaultValue="active" className="w-full">
@@ -465,7 +468,14 @@ const Profile = () => {
 
         {/* Addresses Section */}
         {activeSection === "addresses" && (
-          <AddressManager />
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <MapPin className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className="font-medium">Saved Addresses</p>
+              <p className="text-sm mt-1">No saved addresses yet</p>
+              <Button size="sm" className="mt-4">Add Address</Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* Wishlist Section */}

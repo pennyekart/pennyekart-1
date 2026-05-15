@@ -4,7 +4,6 @@ import PlatformSelector from "@/components/PlatformSelector";
 import SearchBar from "@/components/SearchBar";
 import CategoryBar from "@/components/CategoryBar";
 import BannerCarousel from "@/components/BannerCarousel";
-import CarbsBannerStrip from "@/components/CarbsBannerStrip";
 import GroceryCategories from "@/components/GroceryCategories";
 import ProductRow from "@/components/ProductRow";
 import MobileBottomNav from "@/components/MobileBottomNav";
@@ -13,6 +12,7 @@ import Footer from "@/components/Footer";
 import CartReminderBanner from "@/components/CartReminderBanner";
 import WalletRewardPopup from "@/components/WalletRewardPopup";
 import OfferFlashPopup from "@/components/OfferFlashPopup";
+import ScratchCardWidget from "@/components/ScratchCardWidget";
 import SortFilterBar, { SortOption } from "@/components/SortFilterBar";
 import { useAuth } from "@/hooks/useAuth";
 import { useAreaProducts } from "@/hooks/useAreaProducts";
@@ -264,11 +264,11 @@ const Index = () => {
 
       <main className="relative z-0 space-y-2">
         <CartReminderBanner />
-        <CarbsBannerStrip />
         <FlashSaleBanner />
         <CategoryBar onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
         <SortFilterBar selected={sortBy} onChange={setSortBy} />
         <BannerCarousel />
+        <ScratchCardWidget />
         <GroceryCategories onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
         {renderSectionProducts()}
       </main>

@@ -63,6 +63,21 @@ const SearchBar = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       const searchTerm = `%${query.trim()}%`;
+
+      // Resolve customer's micro godowns (for grocery seller-product visibility)
+      const localBodyId = profile?.local_body_id;
+      const wardNumber = profile?.ward_number;
+      let microGodownIds: string[] = [];
+      if (localBodyId && wardNumber) {
+        const { data: microRows } = await supabase
+          .from('godown_wards')
+          .select('godown_id, godowns!inner(godown_type)')
+          .eq('local_body_id', localBodyId)
+          .eq('ward_number', wardNumber)
+          .eq('godowns.godown_type', 'micro');
+        microGodownIds = [...new Set((microRows ?? []).map(r => r.godown_id))];
+      }
+
       const [productsRes, sellerRes] = await Promise.all([
         supabase
           .from('products')
@@ -72,24 +87,51 @@ const SearchBar = () => {
           .limit(8),
         supabase
           .from('seller_products')
-          .select('id, name, price, mrp, image_url')
+          .select('id, name, price, mrp, image_url, is_grocery, assign_to_all_micro_godowns')
           .eq('is_active', true)
           .eq('is_approved', true)
           .ilike('name', searchTerm)
-          .limit(8),
+          .limit(20),
       ]);
+
+      // Filter seller products: grocery items must be either "assign_to_all" or
+      // explicitly linked to one of the customer's micro godowns.
+      let sellerVisible = (sellerRes.data || []) as any[];
+      if (sellerVisible.length) {
+        const groceryNeedingCheck = sellerVisible.filter(
+          p => p.is_grocery && !p.assign_to_all_micro_godowns
+        );
+        let linkedIds = new Set<string>();
+        if (groceryNeedingCheck.length && microGodownIds.length) {
+          const { data: linkRows } = await supabase
+            .from('seller_product_micro_godowns')
+            .select('seller_product_id')
+            .in('seller_product_id', groceryNeedingCheck.map(p => p.id))
+            .in('godown_id', microGodownIds);
+          linkedIds = new Set((linkRows ?? []).map(r => r.seller_product_id));
+        }
+        sellerVisible = sellerVisible.filter(p => {
+          if (!p.is_grocery) return true;
+          if (p.assign_to_all_micro_godowns) return true;
+          return linkedIds.has(p.id);
+        });
+      }
+
       const items: SearchResult[] = [
         ...(productsRes.data || []).map(p => ({ ...p, source: 'product' as const })),
-        ...(sellerRes.data || []).map(p => ({ ...p, source: 'seller' as const })),
+        ...sellerVisible.slice(0, 8).map(p => ({
+          id: p.id, name: p.name, price: p.price, mrp: p.mrp, image_url: p.image_url,
+          source: 'seller' as const,
+        })),
       ];
       const finalResults = items.slice(0, 10);
       setResults(finalResults);
       setSearching(false);
-      
+
       // Log search to history
       logSearchHistory(query.trim(), finalResults.length);
     }, 300);
-  }, [query, user]);
+  }, [query, user, profile?.local_body_id, profile?.ward_number]);
 
   // Close search results on outside click
   useEffect(() => {

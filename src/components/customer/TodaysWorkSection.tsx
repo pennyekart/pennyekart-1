@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, UserX, UserCheck } from "lucide-react";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isAfter, startOfDay } from "date-fns";
+import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, CheckCircle2, XCircle, Users, Phone, MessageCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/useAuth";
 
 type WorkLog = {
   id: string;
@@ -25,15 +22,14 @@ type WorkLog = {
   updated_at: string;
 };
 
-type Agent = { id: string; name: string; role: string; mobile: string };
+type Agent = { id: string; name: string; role: string; mobile: string; panchayath_id?: string | null; ward?: string | null };
 
-type DeptAgent = { id: string; name: string; role: string; mobile: string; panchayath?: string; ward?: string | number };
-type Department = { name: string; agent_count: number; present_count: number; absent_count: number; present_agents: DeptAgent[]; absent_agents: DeptAgent[] };
+type Panchayath = { id: string; name: string; name_ml?: string | null; district?: string | null; ward?: string | number | null };
+type AbsentAgent = { id: string; name: string; role: string; mobile: string; ward: string | null; panchayath_id: string };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
 export const TodaysWorkSection = () => {
-  const { profile } = useAuth();
   const [checking, setChecking] = useState(true);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [notAgent, setNotAgent] = useState(false);
@@ -44,19 +40,17 @@ export const TodaysWorkSection = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [deptLoading, setDeptLoading] = useState(false);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [panchayathFilter, setPanchayathFilter] = useState<string>("all");
-  const [wardFilter, setWardFilter] = useState<string>("");
-  const [nameFilter, setNameFilter] = useState<string>("");
+  const [monthLogs, setMonthLogs] = useState<WorkLog[]>([]);
+  const [monthCursor, setMonthCursor] = useState<Date>(new Date());
 
-  const canViewAbsent = useMemo(() => {
-    const allowed = ["scode", "s_code", "team_leader", "teamleader", "team-lead", "admin", "super_admin", "superadmin"];
-    const norm = (s?: string | null) => (s || "").toLowerCase().replace(/\s+/g, "_");
-    if (profile?.is_super_admin) return true;
-    if (allowed.includes(norm(agent?.role))) return true;
-    return false;
-  }, [agent?.role, profile?.is_super_admin]);
+  // Absent details state
+  const [panchayaths, setPanchayaths] = useState<Panchayath[]>([]);
+  const [filterPanchayath, setFilterPanchayath] = useState<string>("");
+  const [filterWard, setFilterWard] = useState<string>("all");
+  const [absentLoading, setAbsentLoading] = useState(false);
+  const [absentList, setAbsentList] = useState<AbsentAgent[]>([]);
+  const [presentCount, setPresentCount] = useState(0);
+  const [totalAgents, setTotalAgents] = useState(0);
 
   const callFn = async (opts: { method: string; query?: Record<string, string>; body?: any }) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -103,46 +97,41 @@ export const TodaysWorkSection = () => {
     })();
   }, [date, agent?.id]);
 
+  // Load month attendance whenever the calendar's visible month changes
   useEffect(() => {
-    if (!agent || !canViewAbsent) return;
+    if (!agent) return;
     (async () => {
-      setDeptLoading(true);
-      const r = await callFn({ method: "GET", query: { date: ymd(date), scope: "department" } });
-      if (r.ok) setDepartments(r.body.departments || []);
-      else toast.error(r.body?.error || "Failed to load department logs");
-      setDeptLoading(false);
+      const r = await callFn({ method: "GET", query: { month: format(monthCursor, "yyyy-MM") } });
+      if (r.ok) setMonthLogs(r.body.logs || []);
     })();
-  }, [date, agent?.id, canViewAbsent]);
+  }, [monthCursor, agent?.id]);
 
   const isToday = useMemo(() => ymd(date) === ymd(new Date()), [date]);
 
-  const panchayathOptions = useMemo(() => {
-    const set = new Set<string>();
-    departments.forEach((d) => d.absent_agents.forEach((a) => {
-      const p = (a.panchayath ?? "").toString().trim();
-      if (p) set.add(p);
-    }));
-    return Array.from(set).sort();
-  }, [departments]);
+  const attendance = useMemo(() => {
+    const today = startOfDay(new Date());
+    const monthStart = startOfMonth(monthCursor);
+    const monthEnd = endOfMonth(monthCursor);
+    // Cap end at today (don't count future days as absent)
+    const end = isAfter(monthEnd, today) ? today : monthEnd;
+    const days = isAfter(monthStart, today) ? [] : eachDayOfInterval({ start: monthStart, end });
+    const presentSet = new Set(monthLogs.map((l) => l.work_date));
+    const presentDays = days.filter((d) => presentSet.has(ymd(d)));
+    const absentDays = days.filter((d) => !presentSet.has(ymd(d)));
+    return { totalDays: days.length, presentDays, absentDays, presentSet };
+  }, [monthLogs, monthCursor]);
 
-  const filteredDepartments = useMemo(() => {
-    const wf = wardFilter.trim().toLowerCase();
-    const nf = nameFilter.trim().toLowerCase();
-    return departments
-      .map((d) => {
-        const absent = d.absent_agents.filter((a) => {
-          const p = (a.panchayath ?? "").toString().trim();
-          const w = (a.ward ?? "").toString().trim().toLowerCase();
-          const n = (a.name ?? "").toString().toLowerCase();
-          if (panchayathFilter !== "all" && p !== panchayathFilter) return false;
-          if (wf && !w.includes(wf)) return false;
-          if (nf && !n.includes(nf) && !(a.mobile || "").toLowerCase().includes(nf)) return false;
-          return true;
-        });
-        return { ...d, absent_agents: absent, absent_count: absent.length };
-      })
-      .filter((d) => d.absent_agents.length > 0 || (panchayathFilter === "all" && !wf && !nf));
-  }, [departments, panchayathFilter, wardFilter, nameFilter]);
+  const selectedAttendance = useMemo(() => {
+    const today = startOfDay(new Date());
+    const sel = startOfDay(date);
+    if (isAfter(sel, today)) return "future" as const;
+    return attendance.presentSet.has(ymd(date)) ? "present" as const : "absent" as const;
+  }, [date, attendance.presentSet]);
+
+  const refreshMonth = async () => {
+    const r = await callFn({ method: "GET", query: { month: format(monthCursor, "yyyy-MM") } });
+    if (r.ok) setMonthLogs(r.body.logs || []);
+  };
 
   const handleAdd = async () => {
     if (!draft.trim()) return;
@@ -151,8 +140,11 @@ export const TodaysWorkSection = () => {
     setSaving(false);
     if (!r.ok) { toast.error(r.body?.error || "Failed to save"); return; }
     setDraft("");
-    setLogs((prev) => [r.body.log, ...prev]);
-    toast.success("Work log saved to e-Life");
+    // Reload selected day so we see the appended/merged record
+    const reload = await callFn({ method: "GET", query: { date: ymd(date) } });
+    if (reload.ok) setLogs(reload.body.logs || []);
+    refreshMonth();
+    toast.success("Marked present • Saved to e-Life");
   };
 
   const handleUpdate = async (id: string) => {
@@ -171,6 +163,7 @@ export const TodaysWorkSection = () => {
     const r = await callFn({ method: "DELETE", query: { id } });
     if (!r.ok) { toast.error(r.body?.error || "Failed to delete"); return; }
     setLogs((prev) => prev.filter((l) => l.id !== id));
+    refreshMonth();
     toast.success("Deleted");
   };
 
@@ -212,7 +205,17 @@ export const TodaysWorkSection = () => {
                 mode="single"
                 selected={date}
                 onSelect={(d) => d && setDate(d)}
+                month={monthCursor}
+                onMonthChange={setMonthCursor}
                 disabled={(d) => d > new Date()}
+                modifiers={{
+                  present: attendance.presentDays,
+                  absent: attendance.absentDays,
+                }}
+                modifiersClassNames={{
+                  present: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-semibold",
+                  absent: "bg-destructive/10 text-destructive/80",
+                }}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
@@ -222,6 +225,39 @@ export const TodaysWorkSection = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Attendance summary for the visible month */}
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs font-medium text-muted-foreground">
+              Attendance — {format(monthCursor, "MMMM yyyy")}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 border-0 gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                {attendance.presentDays.length} / {attendance.totalDays} days present
+              </Badge>
+              {attendance.absentDays.length > 0 && (
+                <Badge variant="outline" className="text-destructive border-destructive/30 gap-1">
+                  <XCircle className="h-3 w-3" />
+                  {attendance.absentDays.length} absent
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-muted-foreground">Selected: {format(date, "dd MMM yyyy")}</span>
+            {selectedAttendance === "present" ? (
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Present
+              </span>
+            ) : selectedAttendance === "absent" ? (
+              <span className="inline-flex items-center gap-1 text-destructive font-medium">
+                <XCircle className="h-3.5 w-3.5" /> Absent — add an entry to mark present
+              </span>
+            ) : null}
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Textarea
             value={draft}
@@ -297,101 +333,204 @@ export const TodaysWorkSection = () => {
             ))
           )}
         </div>
-      </CardContent>
 
-      {canViewAbsent && (
-      <CardContent className="border-t pt-4 space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <UserX className="h-4 w-4 text-destructive" />
-            Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ
-          </h3>
-          <p className="text-xs text-muted-foreground">Agents who did not submit work log for {format(date, "PPP")}</p>
-        </div>
-
-        {deptLoading ? (
-          <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-        ) : departments.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-3">No departments found.</p>
-        ) : (
-          <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Select value={panchayathFilter} onValueChange={setPanchayathFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="All panchayaths" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All panchayaths</SelectItem>
-                {panchayathOptions.map((p) => (
-                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              value={wardFilter}
-              onChange={(e) => setWardFilter(e.target.value)}
-              placeholder="Ward filter"
-              className="h-9 text-xs"
-            />
-            <Input
-              value={nameFilter}
-              onChange={(e) => setNameFilter(e.target.value)}
-              placeholder="Search name / mobile"
-              className="h-9 text-xs"
-            />
-          </div>
-          <Accordion type="multiple" className="w-full">
-            {filteredDepartments.map((dept) => (
-              <AccordionItem key={dept.name} value={dept.name}>
-                <AccordionTrigger className="text-sm hover:no-underline">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{dept.name}</span>
-                    <Badge variant="secondary" className="text-[10px]">{dept.agent_count} agent{dept.agent_count === 1 ? "" : "s"}</Badge>
-                    <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-700">{dept.present_count} present</Badge>
-                    <Badge variant="destructive" className="text-[10px]">{dept.absent_count} absent</Badge>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  {dept.absent_agents.length === 0 ? (
-                    <p className="text-xs text-green-600 py-2 flex items-center gap-1">
-                      <UserCheck className="h-3 w-3" /> All agents are present today.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {dept.absent_agents.map((a) => (
-                        <div key={a.id} className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm space-y-1">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <UserX className="h-4 w-4 text-destructive" />
-                              <span className="font-medium">{a.name}</span>
-                              {a.role && (
-                                <Badge variant="secondary" className="text-[10px]">{a.role}</Badge>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-muted-foreground">{a.mobile}</span>
-                          </div>
-                          {(a.panchayath || a.ward) && (
-                            <div className="flex items-center gap-2 flex-wrap pl-6">
-                              {a.panchayath && (
-                                <Badge variant="outline" className="text-[10px]">📍 {a.panchayath}</Badge>
-                              )}
-                              {a.ward !== undefined && a.ward !== "" && (
-                                <Badge variant="outline" className="text-[10px]">Ward {a.ward}</Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-          </>
-        )}
+        <AbsentDetails
+          callFn={callFn}
+          date={date}
+          panchayaths={panchayaths}
+          setPanchayaths={setPanchayaths}
+          filterPanchayath={filterPanchayath}
+          setFilterPanchayath={setFilterPanchayath}
+          filterWard={filterWard}
+          setFilterWard={setFilterWard}
+          absentLoading={absentLoading}
+          setAbsentLoading={setAbsentLoading}
+          absentList={absentList}
+          setAbsentList={setAbsentList}
+          presentCount={presentCount}
+          setPresentCount={setPresentCount}
+          totalAgents={totalAgents}
+          setTotalAgents={setTotalAgents}
+          defaultPanchayath={agent.panchayath_id || ""}
+        />
       </CardContent>
-      )}
     </Card>
+  );
+};
+
+type AbsentProps = {
+  callFn: (opts: { method: string; query?: Record<string, string>; body?: any }) => Promise<{ ok: boolean; status: number; body: any }>;
+  date: Date;
+  panchayaths: Panchayath[];
+  setPanchayaths: (p: Panchayath[]) => void;
+  filterPanchayath: string;
+  setFilterPanchayath: (v: string) => void;
+  filterWard: string;
+  setFilterWard: (v: string) => void;
+  absentLoading: boolean;
+  setAbsentLoading: (v: boolean) => void;
+  absentList: AbsentAgent[];
+  setAbsentList: (v: AbsentAgent[]) => void;
+  presentCount: number;
+  setPresentCount: (v: number) => void;
+  totalAgents: number;
+  setTotalAgents: (v: number) => void;
+  defaultPanchayath: string;
+};
+
+const AbsentDetails = ({
+  callFn, date, panchayaths, setPanchayaths,
+  filterPanchayath, setFilterPanchayath, filterWard, setFilterWard,
+  absentLoading, setAbsentLoading, absentList, setAbsentList,
+  presentCount, setPresentCount, totalAgents, setTotalAgents,
+  defaultPanchayath,
+}: AbsentProps) => {
+  // Load panchayaths once
+  useEffect(() => {
+    if (panchayaths.length > 0) return;
+    (async () => {
+      const r = await callFn({ method: "GET", query: { panchayaths: "1" } });
+      if (r.ok) setPanchayaths(r.body.panchayaths || []);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Default-select caller's panchayath when list arrives
+  useEffect(() => {
+    if (!filterPanchayath && defaultPanchayath && panchayaths.some((p) => p.id === defaultPanchayath)) {
+      setFilterPanchayath(defaultPanchayath);
+    } else if (!filterPanchayath && panchayaths.length > 0) {
+      setFilterPanchayath(panchayaths[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panchayaths.length, defaultPanchayath]);
+
+  const selectedPanchayath = useMemo(
+    () => panchayaths.find((p) => p.id === filterPanchayath) || null,
+    [panchayaths, filterPanchayath],
+  );
+
+  const wardCount = useMemo(() => {
+    const w = selectedPanchayath?.ward;
+    const n = typeof w === "number" ? w : parseInt(String(w || "0"), 10);
+    return isFinite(n) && n > 0 ? n : 0;
+  }, [selectedPanchayath]);
+
+  const fetchAbsent = async () => {
+    if (!filterPanchayath) return;
+    setAbsentLoading(true);
+    const r = await callFn({
+      method: "GET",
+      query: { absent: "1", date: ymd(date), panchayath: filterPanchayath, ward: filterWard },
+    });
+    setAbsentLoading(false);
+    if (!r.ok) { toast.error(r.body?.error || "Failed to load absent details"); return; }
+    setAbsentList(r.body.absent || []);
+    setPresentCount((r.body.present || []).length);
+    setTotalAgents(r.body.totalAgents || 0);
+  };
+
+  // Auto-fetch on filter/date change
+  useEffect(() => {
+    if (filterPanchayath) fetchAbsent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterPanchayath, filterWard, date]);
+
+  return (
+    <div className="rounded-lg border bg-card p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Users className="h-4 w-4 text-primary" />
+          Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ
+        </div>
+        <Button size="sm" variant="ghost" onClick={fetchAbsent} disabled={absentLoading || !filterPanchayath}>
+          <RefreshCw className={cn("h-3.5 w-3.5", absentLoading && "animate-spin")} />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] text-muted-foreground">Panchayath</label>
+          <Select
+            value={filterPanchayath}
+            onValueChange={(v) => { setFilterPanchayath(v); setFilterWard("all"); }}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select panchayath" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {panchayaths.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}{p.name_ml ? ` • ${p.name_ml}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[11px] text-muted-foreground">Ward</label>
+          <Select value={filterWard} onValueChange={setFilterWard}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="All wards" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="all">All wards</SelectItem>
+              {Array.from({ length: wardCount }, (_, i) => String(i + 1)).map((w) => (
+                <SelectItem key={w} value={w}>Ward {w}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 border-0 gap-1">
+          <CheckCircle2 className="h-3 w-3" /> {presentCount} present
+        </Badge>
+        <Badge variant="outline" className="text-destructive border-destructive/30 gap-1">
+          <XCircle className="h-3 w-3" /> {absentList.length} absent
+        </Badge>
+        <span className="text-muted-foreground ml-auto">Total: {totalAgents}</span>
+      </div>
+
+      {absentLoading ? (
+        <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : absentList.length === 0 ? (
+        <p className="text-xs text-center text-emerald-600 dark:text-emerald-400 py-3">
+          🎉 Everyone is present for {format(date, "dd MMM yyyy")}!
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {absentList.map((a) => {
+            const tel = (a.mobile || "").replace(/\D/g, "");
+            const wa = tel.length === 10 ? `91${tel}` : tel;
+            return (
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{a.name}</div>
+                  <div className="text-[11px] text-muted-foreground flex gap-2 flex-wrap">
+                    <span>{a.role}</span>
+                    {a.ward ? <span>• Ward {a.ward}</span> : null}
+                    <span>• {a.mobile}</span>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {tel && (
+                    <a href={`tel:${tel}`} className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted">
+                      <Phone className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  {wa && (
+                    <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center h-8 w-8 rounded-md text-emerald-600 hover:bg-muted">
+                      <MessageCircle className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };

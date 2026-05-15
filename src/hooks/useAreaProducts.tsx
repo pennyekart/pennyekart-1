@@ -33,34 +33,66 @@ const fetchAreaProducts = async (localBodyId: string, wardNumber: number): Promi
       .eq("godowns.godown_type", "area"),
   ]);
 
-  const godownIds = new Set<string>();
-  microRes.data?.forEach(r => godownIds.add(r.godown_id));
-  areaRes.data?.forEach(r => godownIds.add(r.godown_id));
+  const microGodownIds = new Set<string>();
+  microRes.data?.forEach(r => microGodownIds.add(r.godown_id));
+  const areaGodownIds = new Set<string>();
+  areaRes.data?.forEach(r => areaGodownIds.add(r.godown_id));
 
-  if (godownIds.size === 0) return [];
+  const allGodownIds = new Set<string>([...microGodownIds, ...areaGodownIds]);
+  if (allGodownIds.size === 0) return [];
 
-  const godownArr = Array.from(godownIds);
+  const microArr = Array.from(microGodownIds);
+  const areaArr = Array.from(areaGodownIds);
+  const allArr = Array.from(allGodownIds);
 
-  // Fetch stock and seller products in parallel
-  const [stockRes, sellerRes] = await Promise.all([
+  // Fetch admin product stock + seller products visible to this customer
+  // Seller products are visible if:
+  //   (a) assign_to_all_micro_godowns = true, OR
+  //   (b) linked via seller_product_micro_godowns to one of the customer's micro godowns
+  // We also still respect area_godown_id (existing behaviour) for non-grocery seller items.
+  const sellerProductSelect = "id, name, price, mrp, discount_rate, image_url, description, category, stock, coming_soon, wallet_points, seller_id, is_grocery, assign_to_all_micro_godowns";
+
+  const linkedIdsPromise = microArr.length
+    ? supabase
+        .from("seller_product_micro_godowns")
+        .select("seller_product_id")
+        .in("godown_id", microArr)
+    : Promise.resolve({ data: [] as { seller_product_id: string }[] });
+
+  const [stockRes, sellerAllRes, sellerAreaRes, linkedRes] = await Promise.all([
     supabase
       .from("godown_stock")
       .select("product_id, quantity")
-      .in("godown_id", godownArr)
+      .in("godown_id", allArr)
       .gt("quantity", 0),
+    // Seller products with "assign to all micro godowns" flag
     supabase
       .from("seller_products")
-      .select("id, name, price, mrp, discount_rate, image_url, description, category, stock, coming_soon, wallet_points, seller_id")
-      .in("area_godown_id", godownArr)
+      .select(sellerProductSelect)
       .eq("is_active", true)
       .eq("is_approved", true)
       .eq("coming_soon", false)
+      .eq("assign_to_all_micro_godowns", true)
       .gt("stock", 0)
-      .limit(30),
+      .limit(60),
+    // Existing area-godown based seller products (kept for non-grocery / legacy)
+    areaArr.length
+      ? supabase
+          .from("seller_products")
+          .select(sellerProductSelect)
+          .in("area_godown_id", areaArr)
+          .eq("is_active", true)
+          .eq("is_approved", true)
+          .eq("coming_soon", false)
+          .gt("stock", 0)
+          .limit(60)
+      : Promise.resolve({ data: [] as any[] }),
+    linkedIdsPromise,
   ]);
 
   let allProducts: AreaProduct[] = [];
 
+  // Admin products via godown stock
   if (stockRes.data?.length) {
     const productIds = [...new Set(stockRes.data.map(s => s.product_id))];
     const { data: productData } = await supabase
@@ -73,13 +105,41 @@ const fetchAreaProducts = async (localBodyId: string, wardNumber: number): Promi
     if (productData) allProducts.push(...(productData as AreaProduct[]));
   }
 
-  if (sellerRes.data && sellerRes.data.length > 0) {
-    // Note: seller_products.is_approved is already filtered server-side by an admin,
-    // so we don't need to re-check the seller's profile.is_approved here.
-    // Doing so would fail silently because RLS on `profiles` only allows users to
-    // read their own profile — making the approved set empty and hiding all seller items.
+  // Seller products visible specifically to this customer's micro godowns
+  const linkedIds = [...new Set((linkedRes.data ?? []).map((r: any) => r.seller_product_id))];
+  let sellerLinkedRes: { data: any[] | null } = { data: [] };
+  if (linkedIds.length) {
+    sellerLinkedRes = await supabase
+      .from("seller_products")
+      .select(sellerProductSelect)
+      .in("id", linkedIds)
+      .eq("is_active", true)
+      .eq("is_approved", true)
+      .eq("coming_soon", false)
+      .gt("stock", 0)
+      .limit(60);
+  }
+
+  // Merge & dedupe seller products from three sources
+  const sellerMap = new Map<string, any>();
+  const pushAll = (rows: any[] | null | undefined) => {
+    (rows ?? []).forEach((row) => {
+      // For grocery items only show via micro-godown rules (all-flag or linked).
+      // The area-godown query may include grocery rows that should NOT be visible —
+      // skip them when they aren't allowed by the new visibility model.
+      if (row.is_grocery && !row.assign_to_all_micro_godowns) {
+        if (!linkedIds.includes(row.id)) return;
+      }
+      sellerMap.set(row.id, row);
+    });
+  };
+  pushAll(sellerAllRes.data);
+  pushAll(sellerLinkedRes.data);
+  pushAll(sellerAreaRes.data);
+
+  if (sellerMap.size > 0) {
     allProducts.push(
-      ...sellerRes.data.map(sp => ({
+      ...Array.from(sellerMap.values()).map((sp) => ({
         ...sp,
         section: "seller" as string | null,
       } as AreaProduct))

@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, MapPin, Building2, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import GoogleMapsKeyCard from "@/components/admin/GoogleMapsKeyCard";
 
 const LocationsPage = () => {
   const { toast } = useToast();
@@ -122,8 +121,6 @@ const LocationsPage = () => {
           <h1 className="text-2xl font-bold">Location Management</h1>
           <p className="text-sm text-muted-foreground">India → Kerala → Districts → Panchayath/Municipality → Wards</p>
         </div>
-
-        <GoogleMapsKeyCard />
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Districts */}

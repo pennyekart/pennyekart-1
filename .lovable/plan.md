@@ -1,52 +1,52 @@
-## Department Work Logs — Plan
+# Fix Panchayath / Ward filters on "Absent Details"
 
-Add a read-only "Department Work Logs" feed below the existing personal "Today's Work" editor on `/customer/profile`. Every Pennyekart agent sees all agents' logs (for the selected date) grouped by department. The edge function auto-detects which column on `pennyekart_agents` represents the department.
+The "Absent Details" view doesn't exist yet on `/customer/profile?tab=profile` — only the agent's own `TodaysWorkSection` is rendered, and it has no panchayath/ward filter. So nothing can drive the filter today. Plan: build the Absent Details panel inside `TodaysWorkSection` and wire the filters end-to-end.
 
-### 1. Edge function — extend `agent-work-logs`
+## What you'll see in the UI
 
-Add a new GET mode triggered by query param `scope=department`:
+Inside `TodaysWorkSection` (only when the caller is an agent), add a new collapsible card titled **"Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ"** with:
 
-- Auth + agent lookup unchanged (mobile → `pennyekart_agents`).
-- After confirming caller is an agent, auto-detect the "department" column once per request:
-  1. Fetch one row from `pennyekart_agents?limit=1` and inspect keys.
-  2. Pick the first key matching this priority list (case-insensitive):
-     `department_name`, `department`, `dept`, `department_id`, `team`, `unit`, `branch`, `role`.
-  3. Cache the detected key in module scope so subsequent calls skip detection.
-- Fetch all agents: `GET pennyekart_agents?select=id,name,role,mobile,<deptCol>` (paginate with `Range` if >1000).
-- Fetch logs for the date: `GET agent_work_logs?work_date=eq.<date>&order=created_at.desc` (also paginate if needed).
-- Group logs by `agent.<deptCol>` (fallback bucket: `"Unassigned"`), embedding agent name/role on each log.
-- Return: `{ department_column, departments: [{ name, agent_count, log_count, logs: [{id, agent_id, agent_name, agent_role, work_date, work_details, created_at, updated_at}] }] }`.
+- Date picker (defaults to selected date in the parent card).
+- **Panchayath** Select (loaded from `locations_local_bodies`, default = caller's panchayath).
+- **Ward** Select (loaded from the chosen panchayath's `ward_count`, "All wards" option).
+- A list of agents in that panchayath/ward who have **no** `agent_work_logs` row for the chosen date, showing name, role, mobile (with WhatsApp/call link), and ward.
+- A "Refresh" button + present/absent counters.
 
-Existing personal endpoints (no `scope`) remain unchanged.
+Filters update the list immediately; changing panchayath resets the ward to "All".
 
-### 2. Frontend — `src/components/customer/TodaysWorkSection.tsx`
+## Data flow
 
-Below the existing logs list, render a new collapsible section "Department Work Logs — വകുപ്പുകളുടെ വർക്ക് ലോഗ്":
+Extend the existing `agent-work-logs` edge function with a new GET mode:
 
-- Fetch via `callFn({ method: "GET", query: { date: ymd(date), scope: "department" } })` whenever `agent` or `date` changes.
-- Render an Accordion (shadcn `accordion.tsx`) with one item per department. Header shows department name + badge with `agent_count` and `log_count`.
-- Each accordion body lists the logs sorted by `created_at desc`, each card showing: agent name + role badge, time, and `work_details` (whitespace-pre-wrap). Read-only — no edit/delete buttons.
-- Empty state per department: "No logs for this date." Top-level empty state if no departments returned.
-- Light loading spinner while fetching; errors → toast.
-- Section is hidden if `notAgent` (same gating as the rest of the component).
+`GET /agent-work-logs?absent=1&date=YYYY-MM-DD&panchayath=<elife_panchayath_id>&ward=<n>`
 
-### 3. Visual / UX details
+Logic:
+1. Auth as today (caller must be a registered agent — reuse current lookup).
+2. From e-Life, fetch `pennyekart_agents` filtered by `panchayath_id=eq.<…>` (and `ward=eq.<n>` when provided), `is_active=true`.
+3. Fetch `agent_work_logs?work_date=eq.<date>&agent_id=in.(<ids>)` and build a present-set.
+4. Return `{ totalAgents, present: [...], absent: [{id,name,role,mobile,ward,panchayath_id}] }`.
 
-- Section uses the existing `Card` patterns and earth-tone palette (no new colors).
-- Heading uses Playfair Display (inherited via `CardTitle`); body uses DM Sans.
-- Each log card matches the existing `rounded-lg border bg-muted/20 p-3` style.
-- Department headers ordered alphabetically, except `"Unassigned"` last.
+If e-Life `pennyekart_agents` doesn't expose `ward`/`panchayath_id` we'll fall back to whatever fields exist (the chat edge function already references `agent.panchayath_id`, so panchayath is available; ward filter will be skipped gracefully if absent and the UI will hide the Ward Select in that case).
 
-### 4. Verification
+Mapping panchayath: the local Supabase `locations_local_bodies.id` is **not** the same as e-Life's `panchayath_id`. To make the UI Select usable we'll fetch the panchayath list from e-Life via a small extension to the edge function:
 
-After deploy:
-- `curl agent-work-logs?scope=department&date=YYYY-MM-DD` returns the grouped payload.
-- Profile page shows the new accordion under the personal log list.
-- Logs in different departments appear in their respective groups.
+`GET /agent-work-logs?panchayaths=1` → returns `[{ id, name, ward_count }]` from e-Life `panchayaths` table. The Select then sends e-Life IDs straight back to the absent endpoint, so filters actually match.
 
-### Files
+## Files to change
 
-- edit `supabase/functions/agent-work-logs/index.ts` — add `scope=department` branch + column auto-detect + caching.
-- edit `src/components/customer/TodaysWorkSection.tsx` — fetch + render accordion grouped feed.
+- `supabase/functions/agent-work-logs/index.ts` — add `panchayaths=1` and `absent=1` GET branches; keep existing behaviour intact.
+- `src/components/customer/TodaysWorkSection.tsx` — add the new "Absent Details" card with Panchayath + Ward Selects, fetch logic, list rendering, and Malayalam title. Default panchayath = caller agent's `panchayath_id` returned from `/agent`.
+- `src/components/customer/TodaysWorkSection.tsx` (small) — extend the agent payload returned from the existing GET to include `panchayath_id` and `ward` so we can preselect filters.
 
-No DB migrations or new secrets needed.
+## Acceptance
+
+- Selecting a different panchayath or ward immediately re-queries and shows a different absent list.
+- "All wards" returns every ward in the panchayath.
+- Empty state ("Everyone is present 🎉") when the absent array is empty.
+- Caller still sees their own work card unchanged above the new section.
+
+## Out of scope
+
+- Editing other agents' logs.
+- Persisting filter selection across reloads.
+- Adding panchayath/ward filters anywhere outside `TodaysWorkSection`.
