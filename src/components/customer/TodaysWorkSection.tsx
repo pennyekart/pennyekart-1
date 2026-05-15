@@ -179,11 +179,6 @@ export const TodaysWorkSection = () => {
 
   if (notAgent || !agent) return null;
 
-  return <TodaysWorkInner />;
-
-  function TodaysWorkInner() { return null as any; }
-};
-
   return (
     <Card className="border-primary/20">
       <CardHeader className="pb-3">
@@ -338,7 +333,204 @@ export const TodaysWorkSection = () => {
             ))
           )}
         </div>
+
+        <AbsentDetails
+          callFn={callFn}
+          date={date}
+          panchayaths={panchayaths}
+          setPanchayaths={setPanchayaths}
+          filterPanchayath={filterPanchayath}
+          setFilterPanchayath={setFilterPanchayath}
+          filterWard={filterWard}
+          setFilterWard={setFilterWard}
+          absentLoading={absentLoading}
+          setAbsentLoading={setAbsentLoading}
+          absentList={absentList}
+          setAbsentList={setAbsentList}
+          presentCount={presentCount}
+          setPresentCount={setPresentCount}
+          totalAgents={totalAgents}
+          setTotalAgents={setTotalAgents}
+          defaultPanchayath={agent.panchayath_id || ""}
+        />
       </CardContent>
     </Card>
+  );
+};
+
+type AbsentProps = {
+  callFn: (opts: { method: string; query?: Record<string, string>; body?: any }) => Promise<{ ok: boolean; status: number; body: any }>;
+  date: Date;
+  panchayaths: Panchayath[];
+  setPanchayaths: (p: Panchayath[]) => void;
+  filterPanchayath: string;
+  setFilterPanchayath: (v: string) => void;
+  filterWard: string;
+  setFilterWard: (v: string) => void;
+  absentLoading: boolean;
+  setAbsentLoading: (v: boolean) => void;
+  absentList: AbsentAgent[];
+  setAbsentList: (v: AbsentAgent[]) => void;
+  presentCount: number;
+  setPresentCount: (v: number) => void;
+  totalAgents: number;
+  setTotalAgents: (v: number) => void;
+  defaultPanchayath: string;
+};
+
+const AbsentDetails = ({
+  callFn, date, panchayaths, setPanchayaths,
+  filterPanchayath, setFilterPanchayath, filterWard, setFilterWard,
+  absentLoading, setAbsentLoading, absentList, setAbsentList,
+  presentCount, setPresentCount, totalAgents, setTotalAgents,
+  defaultPanchayath,
+}: AbsentProps) => {
+  // Load panchayaths once
+  useEffect(() => {
+    if (panchayaths.length > 0) return;
+    (async () => {
+      const r = await callFn({ method: "GET", query: { panchayaths: "1" } });
+      if (r.ok) setPanchayaths(r.body.panchayaths || []);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Default-select caller's panchayath when list arrives
+  useEffect(() => {
+    if (!filterPanchayath && defaultPanchayath && panchayaths.some((p) => p.id === defaultPanchayath)) {
+      setFilterPanchayath(defaultPanchayath);
+    } else if (!filterPanchayath && panchayaths.length > 0) {
+      setFilterPanchayath(panchayaths[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panchayaths.length, defaultPanchayath]);
+
+  const selectedPanchayath = useMemo(
+    () => panchayaths.find((p) => p.id === filterPanchayath) || null,
+    [panchayaths, filterPanchayath],
+  );
+
+  const wardCount = useMemo(() => {
+    const w = selectedPanchayath?.ward;
+    const n = typeof w === "number" ? w : parseInt(String(w || "0"), 10);
+    return isFinite(n) && n > 0 ? n : 0;
+  }, [selectedPanchayath]);
+
+  const fetchAbsent = async () => {
+    if (!filterPanchayath) return;
+    setAbsentLoading(true);
+    const r = await callFn({
+      method: "GET",
+      query: { absent: "1", date: ymd(date), panchayath: filterPanchayath, ward: filterWard },
+    });
+    setAbsentLoading(false);
+    if (!r.ok) { toast.error(r.body?.error || "Failed to load absent details"); return; }
+    setAbsentList(r.body.absent || []);
+    setPresentCount((r.body.present || []).length);
+    setTotalAgents(r.body.totalAgents || 0);
+  };
+
+  // Auto-fetch on filter/date change
+  useEffect(() => {
+    if (filterPanchayath) fetchAbsent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterPanchayath, filterWard, date]);
+
+  return (
+    <div className="rounded-lg border bg-card p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Users className="h-4 w-4 text-primary" />
+          Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ
+        </div>
+        <Button size="sm" variant="ghost" onClick={fetchAbsent} disabled={absentLoading || !filterPanchayath}>
+          <RefreshCw className={cn("h-3.5 w-3.5", absentLoading && "animate-spin")} />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div>
+          <label className="text-[11px] text-muted-foreground">Panchayath</label>
+          <Select
+            value={filterPanchayath}
+            onValueChange={(v) => { setFilterPanchayath(v); setFilterWard("all"); }}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select panchayath" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              {panchayaths.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}{p.name_ml ? ` • ${p.name_ml}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[11px] text-muted-foreground">Ward</label>
+          <Select value={filterWard} onValueChange={setFilterWard}>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="All wards" />
+            </SelectTrigger>
+            <SelectContent className="max-h-72">
+              <SelectItem value="all">All wards</SelectItem>
+              {Array.from({ length: wardCount }, (_, i) => String(i + 1)).map((w) => (
+                <SelectItem key={w} value={w}>Ward {w}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15 border-0 gap-1">
+          <CheckCircle2 className="h-3 w-3" /> {presentCount} present
+        </Badge>
+        <Badge variant="outline" className="text-destructive border-destructive/30 gap-1">
+          <XCircle className="h-3 w-3" /> {absentList.length} absent
+        </Badge>
+        <span className="text-muted-foreground ml-auto">Total: {totalAgents}</span>
+      </div>
+
+      {absentLoading ? (
+        <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : absentList.length === 0 ? (
+        <p className="text-xs text-center text-emerald-600 dark:text-emerald-400 py-3">
+          🎉 Everyone is present for {format(date, "dd MMM yyyy")}!
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {absentList.map((a) => {
+            const tel = (a.mobile || "").replace(/\D/g, "");
+            const wa = tel.length === 10 ? `91${tel}` : tel;
+            return (
+              <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-1.5">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{a.name}</div>
+                  <div className="text-[11px] text-muted-foreground flex gap-2 flex-wrap">
+                    <span>{a.role}</span>
+                    {a.ward ? <span>• Ward {a.ward}</span> : null}
+                    <span>• {a.mobile}</span>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {tel && (
+                    <a href={`tel:${tel}`} className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted">
+                      <Phone className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  {wa && (
+                    <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center h-8 w-8 rounded-md text-emerald-600 hover:bg-muted">
+                      <MessageCircle className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
