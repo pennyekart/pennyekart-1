@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isAfter, startOfDay } from "date-fns";
-import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, CheckCircle2, XCircle } from "lucide-react";
+import { CalendarIcon, Loader2, Plus, Save, Pencil, Trash2, Briefcase, CheckCircle2, XCircle, Users, Phone, MessageCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,7 +22,10 @@ type WorkLog = {
   updated_at: string;
 };
 
-type Agent = { id: string; name: string; role: string; mobile: string };
+type Agent = { id: string; name: string; role: string; mobile: string; panchayath_id?: string | null; ward?: string | null };
+
+type Panchayath = { id: string; name: string; name_ml?: string | null; district?: string | null; ward?: string | number | null };
+type AbsentAgent = { id: string; name: string; role: string; mobile: string; ward: string | null; panchayath_id: string };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -38,6 +42,15 @@ export const TodaysWorkSection = () => {
   const [editingText, setEditingText] = useState("");
   const [monthLogs, setMonthLogs] = useState<WorkLog[]>([]);
   const [monthCursor, setMonthCursor] = useState<Date>(new Date());
+
+  // Absent details state
+  const [panchayaths, setPanchayaths] = useState<Panchayath[]>([]);
+  const [filterPanchayath, setFilterPanchayath] = useState<string>("");
+  const [filterWard, setFilterWard] = useState<string>("all");
+  const [absentLoading, setAbsentLoading] = useState(false);
+  const [absentList, setAbsentList] = useState<AbsentAgent[]>([]);
+  const [presentCount, setPresentCount] = useState(0);
+  const [totalAgents, setTotalAgents] = useState(0);
 
   const callFn = async (opts: { method: string; query?: Record<string, string>; body?: any }) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -165,6 +178,11 @@ export const TodaysWorkSection = () => {
   }
 
   if (notAgent || !agent) return null;
+
+  return <TodaysWorkInner />;
+
+  function TodaysWorkInner() { return null as any; }
+};
 
   return (
     <Card className="border-primary/20">
