@@ -384,7 +384,6 @@ const ScratchRewardsPage = () => {
               label="Reveal image (optional)"
             />
 
-            <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
             {(editing?.coupon_type || (editing?.product_link_url ? "product" : "amount")) === "amount" && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="font-semibold">💰 Wallet Reward</Label>
