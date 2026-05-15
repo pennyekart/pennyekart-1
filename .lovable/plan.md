@@ -1,99 +1,52 @@
+# Fix Panchayath / Ward filters on "Absent Details"
 
+The "Absent Details" view doesn't exist yet on `/customer/profile?tab=profile` — only the agent's own `TodaysWorkSection` is rendered, and it has no panchayath/ward filter. So nothing can drive the filter today. Plan: build the Absent Details panel inside `TodaysWorkSection` and wire the filters end-to-end.
 
-## Goal
+## What you'll see in the UI
 
-Add a **Scratch & Win** rewards feature (GPay-style) managed from `/admin`, with the same audience targeting as Notifications (All / e-Life Agents / Selected Panchayaths), plus an **agent-only streak reward** based on consecutive days of "Today's Work" entries.
+Inside `TodaysWorkSection` (only when the caller is an agent), add a new collapsible card titled **"Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ"** with:
 
-## Concept
+- Date picker (defaults to selected date in the parent card).
+- **Panchayath** Select (loaded from `locations_local_bodies`, default = caller's panchayath).
+- **Ward** Select (loaded from the chosen panchayath's `ward_count`, "All wards" option).
+- A list of agents in that panchayath/ward who have **no** `agent_work_logs` row for the chosen date, showing name, role, mobile (with WhatsApp/call link), and ward.
+- A "Refresh" button + present/absent counters.
 
-Admin creates **scratch cards**. Each card defines:
-- **Audience** — `all` | `agents` | `panchayath` (with selected local bodies), identical to notifications.
-- **Reward** — wallet credit amount (₹) credited to customer's wallet on scratch.
-- **Visual** — title + subtitle + optional cover image (Cloudinary via existing `ImageUpload`) + optional reveal text/image shown after scratching.
-- **Window** — start/end datetime, active toggle, max claims per user (default 1).
-- **Streak rule (agents only)** — optional: requires N consecutive days of work logs ending today.
+Filters update the list immediately; changing panchayath resets the ward to "All".
 
-Customers see eligible unscratched cards as a card stack on the home page and on `/customer/profile`. They scratch (canvas overlay erased by drag) → reward animates in → wallet credited via secure edge function.
+## Data flow
 
-## Data model (new tables)
+Extend the existing `agent-work-logs` edge function with a new GET mode:
 
-```text
-scratch_cards
-  id, title, subtitle, cover_image_url, reveal_text, reveal_image_url,
-  reward_amount numeric, target_audience text,
-  target_local_body_ids uuid[], start_at, end_at,
-  is_active bool, max_claims_per_user int default 1,
-  requires_agent_streak_days int null,  -- e.g. 7 = needs 7 consecutive days
-  created_by, created_at, updated_at
+`GET /agent-work-logs?absent=1&date=YYYY-MM-DD&panchayath=<elife_panchayath_id>&ward=<n>`
 
-scratch_card_claims
-  id, card_id, user_id, claimed_at, reward_amount, wallet_tx_id
-  unique(card_id, user_id)  -- enforces one claim per card per user
-```
+Logic:
+1. Auth as today (caller must be a registered agent — reuse current lookup).
+2. From e-Life, fetch `pennyekart_agents` filtered by `panchayath_id=eq.<…>` (and `ward=eq.<n>` when provided), `is_active=true`.
+3. Fetch `agent_work_logs?work_date=eq.<date>&agent_id=in.(<ids>)` and build a present-set.
+4. Return `{ totalAgents, present: [...], absent: [{id,name,role,mobile,ward,panchayath_id}] }`.
 
-RLS:
-- `scratch_cards`: anyone can SELECT active rows; admins (super_admin or `read_settings`) full CRUD.
-- `scratch_card_claims`: user can SELECT/INSERT own; admins SELECT all.
+If e-Life `pennyekart_agents` doesn't expose `ward`/`panchayath_id` we'll fall back to whatever fields exist (the chat edge function already references `agent.panchayath_id`, so panchayath is available; ward filter will be skipped gracefully if absent and the UI will hide the Ward Select in that case).
 
-## Edge function: `scratch-claim`
+Mapping panchayath: the local Supabase `locations_local_bodies.id` is **not** the same as e-Life's `panchayath_id`. To make the UI Select usable we'll fetch the panchayath list from e-Life via a small extension to the edge function:
 
-Single endpoint that:
-1. Authenticates the caller.
-2. Loads the card; verifies it is active and within its window.
-3. Verifies eligibility:
-   - audience match (re-uses agent check via `pennyekart_agents` like `notifications-resolve`),
-   - claim count under `max_claims_per_user`,
-   - if `requires_agent_streak_days` set → query `agent_work_logs` from e-Life and confirm N consecutive days ending today.
-4. Inserts claim row + wallet credit transaction atomically using service role.
-5. Returns `{ success, reward_amount, balance }`.
+`GET /agent-work-logs?panchayaths=1` → returns `[{ id, name, ward_count }]` from e-Life `panchayaths` table. The Select then sends e-Life IDs straight back to the absent endpoint, so filters actually match.
 
-All eligibility logic lives server-side so the client cannot self-credit.
+## Files to change
 
-## Admin UI — `/admin/scratch-rewards`
+- `supabase/functions/agent-work-logs/index.ts` — add `panchayaths=1` and `absent=1` GET branches; keep existing behaviour intact.
+- `src/components/customer/TodaysWorkSection.tsx` — add the new "Absent Details" card with Panchayath + Ward Selects, fetch logic, list rendering, and Malayalam title. Default panchayath = caller agent's `panchayath_id` returned from `/agent`.
+- `src/components/customer/TodaysWorkSection.tsx` (small) — extend the agent payload returned from the existing GET to include `panchayath_id` and `ward` so we can preselect filters.
 
-New page added to `AdminLayout` sidebar (icon: `Gift`), guarded by `read_settings` permission.
+## Acceptance
 
-Layout mirrors `NotificationsPage`:
-- Table of cards (Title, Audience, Reward, Window, Status, Claims count, Actions).
-- "New Scratch Card" dialog with: title, subtitle, cover image (`ImageUpload` to `banners` bucket), reveal text/image, reward amount, audience selector (same 3 options + panchayath multi-select), start/end pickers, max claims per user, and an "Agent streak required" numeric input (only visible when audience = `agents`).
-- Per-card "Claims" drawer listing users who claimed (name, mobile, panchayath, claimed_at) with CSV export.
+- Selecting a different panchayath or ward immediately re-queries and shows a different absent list.
+- "All wards" returns every ward in the panchayath.
+- Empty state ("Everyone is present 🎉") when the absent array is empty.
+- Caller still sees their own work card unchanged above the new section.
 
-Route: `/admin/scratch-rewards` registered in `App.tsx`.
+## Out of scope
 
-## Customer UI
-
-New component `ScratchCardWidget`:
-- Fetches eligible cards (`active` + window + audience match + not-yet-claimed-by-me) via a small RPC or filtered select using the same audience filter as notifications.
-- Renders a horizontal swipable stack on the home page (above `Categories`) and a section in `/customer/profile`.
-- Tapping a card opens a fullscreen modal with a `<canvas>` scratch overlay (drag to erase). When >60 % erased it auto-completes, calls `scratch-claim`, plays a confetti animation, shows reward + reveal text/image, and refreshes the wallet balance.
-- Once claimed, the card disappears from the stack.
-
-For the agent streak case: ineligible streak cards are still shown (greyed) with progress text "5 / 7 days streak — keep going!" so agents are motivated. Streak progress is computed by reusing `agent-work-logs` GET (`?month=`) and counting consecutive days ending today.
-
-## Files
-
-New
-- `supabase/functions/scratch-claim/index.ts`
-- `src/pages/admin/ScratchRewardsPage.tsx`
-- `src/components/ScratchCardWidget.tsx`
-- `src/components/ScratchCardModal.tsx` (canvas + scratch logic)
-- `src/hooks/useScratchCards.tsx`
-
-Edited
-- `src/App.tsx` — register `/admin/scratch-rewards` route.
-- `src/components/admin/AdminLayout.tsx` — add sidebar entry.
-- `src/pages/Index.tsx` and `src/pages/customer/Profile.tsx` — mount `<ScratchCardWidget />`.
-
-## Database changes
-
-Migration creates the two tables, indexes (`card_id, user_id`), and RLS policies described above. No changes to existing tables.
-
-## Verification
-
-1. Admin → `/admin/scratch-rewards` → create "Diwali ₹50 reward" targeted to "All Users" → save.
-2. Customer home page shows the card → scratches → wallet credited ₹50, transaction logged, card disappears.
-3. Create a card targeted to a specific panchayath → only customers in that local body see it.
-4. Create an agents-only card with `requires_agent_streak_days = 7` → an agent with <7 consecutive work-log days sees a locked card with progress; once they complete 7 in a row, it unlocks and is claimable.
-5. Re-claim attempts return "already claimed". A non-targeted user calling `scratch-claim` directly is rejected with 403.
-6. Admin claims drawer shows the claimant list with CSV export.
-
+- Editing other agents' logs.
+- Persisting filter selection across reloads.
+- Adding panchayath/ward filters anywhere outside `TodaysWorkSection`.
