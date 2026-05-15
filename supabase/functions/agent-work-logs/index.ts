@@ -71,6 +71,45 @@ serve(async (req) => {
     const url = new URL(req.url);
 
     if (req.method === "GET") {
+      // List panchayaths from e-Life (for filter dropdown)
+      if (url.searchParams.get("panchayaths") === "1") {
+        const r = await fetch(
+          `${elifeUrl}/rest/v1/panchayaths?is_active=eq.true&select=id,name,name_ml,district,ward&order=name.asc`,
+          { headers: elifeHeaders },
+        );
+        if (!r.ok) return json(502, { error: "panchayaths fetch failed", details: await r.text() });
+        return json(200, { panchayaths: await r.json() });
+      }
+
+      // Absent details for a given date / panchayath / ward
+      if (url.searchParams.get("absent") === "1") {
+        const date = url.searchParams.get("date");
+        const panchayath = url.searchParams.get("panchayath") || "";
+        const ward = url.searchParams.get("ward") || ""; // "all" or specific
+        if (!date) return json(400, { error: "date required" });
+        if (!panchayath) return json(400, { error: "panchayath required" });
+
+        let agentsQ = `panchayath_id=eq.${panchayath}&is_active=eq.true&select=id,name,role,mobile,ward,panchayath_id&order=name.asc`;
+        if (ward && ward !== "all") agentsQ += `&ward=eq.${encodeURIComponent(ward)}`;
+        const aRes = await fetch(`${elifeUrl}/rest/v1/pennyekart_agents?${agentsQ}`, { headers: elifeHeaders });
+        if (!aRes.ok) return json(502, { error: "agents fetch failed", details: await aRes.text() });
+        const allAgents: any[] = await aRes.json();
+        if (allAgents.length === 0) {
+          return json(200, { totalAgents: 0, present: [], absent: [] });
+        }
+        const ids = allAgents.map((a) => a.id);
+        const inList = `(${ids.map((i) => `"${i}"`).join(",")})`;
+        const lRes = await fetch(
+          `${elifeUrl}/rest/v1/agent_work_logs?work_date=eq.${date}&agent_id=in.${inList}&select=agent_id`,
+          { headers: elifeHeaders },
+        );
+        if (!lRes.ok) return json(502, { error: "logs fetch failed", details: await lRes.text() });
+        const presentSet = new Set<string>(((await lRes.json()) as any[]).map((l) => l.agent_id));
+        const present = allAgents.filter((a) => presentSet.has(a.id));
+        const absent = allAgents.filter((a) => !presentSet.has(a.id));
+        return json(200, { totalAgents: allAgents.length, present, absent });
+      }
+
       // List logs for this agent, optionally filtered by date or month
       const date = url.searchParams.get("date"); // YYYY-MM-DD
       const month = url.searchParams.get("month"); // YYYY-MM
@@ -80,7 +119,17 @@ serve(async (req) => {
       const r = await fetch(`${elifeUrl}/rest/v1/agent_work_logs?${q}`, { headers: elifeHeaders });
       if (!r.ok) return json(502, { error: "fetch failed", details: await r.text() });
       const logs = await r.json();
-      return json(200, { agent: { id: agent.id, name: agent.name, role: agent.role, mobile: agent.mobile }, logs });
+      return json(200, {
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          role: agent.role,
+          mobile: agent.mobile,
+          panchayath_id: agent.panchayath_id,
+          ward: agent.ward,
+        },
+        logs,
+      });
     }
 
     if (req.method === "POST") {
