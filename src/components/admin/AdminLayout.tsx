@@ -155,6 +155,8 @@ const AdminLayout = ({ children }: { children: ReactNode }) => {
       <div className="hidden flex-1 flex-col lg:flex">
         <main className="flex-1 p-6">{children}</main>
       </div>
+
+      <AdminPendingOrdersNotification />
     </div>
   );
 };
