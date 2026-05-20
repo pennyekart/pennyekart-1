@@ -1595,6 +1595,8 @@ export type Database = {
           id: string
           is_active: boolean
           max_claims_per_user: number
+          product_discount_text: string | null
+          product_link_url: string | null
           requires_agent_streak_days: number | null
           reveal_image_url: string | null
           reveal_text: string | null
@@ -1614,6 +1616,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           max_claims_per_user?: number
+          product_discount_text?: string | null
+          product_link_url?: string | null
           requires_agent_streak_days?: number | null
           reveal_image_url?: string | null
           reveal_text?: string | null
@@ -1633,6 +1637,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           max_claims_per_user?: number
+          product_discount_text?: string | null
+          product_link_url?: string | null
           requires_agent_streak_days?: number | null
           reveal_image_url?: string | null
           reveal_text?: string | null
