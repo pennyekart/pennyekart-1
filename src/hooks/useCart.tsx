@@ -13,9 +13,13 @@ export interface CartItem {
   coming_soon?: boolean;
 }
 
+interface AddItemOptions {
+  overridePrice?: boolean;
+}
+
 interface CartContextType {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, "quantity">, qty?: number) => void;
+  addItem: (item: Omit<CartItem, "quantity">, qty?: number, options?: AddItemOptions) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, qty: number) => void;
   clearCart: () => void;
