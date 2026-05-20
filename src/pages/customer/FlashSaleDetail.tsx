@@ -240,8 +240,10 @@ const FlashSaleDetail = () => {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {products.map(item => {
-              const discountPercent = item.flash_mrp > item.flash_price
-                ? Math.round(((item.flash_mrp - item.flash_price) / item.flash_mrp) * 100)
+              const effectivePrice = computeEffectivePrice(item.flash_price);
+              const compareMrp = Math.max(item.flash_mrp, item.flash_price);
+              const discountPercent = compareMrp > effectivePrice
+                ? Math.round(((compareMrp - effectivePrice) / compareMrp) * 100)
                 : 0;
               return (
                 <div
@@ -270,19 +272,32 @@ const FlashSaleDetail = () => {
                     >
                       {item.product_name}
                     </p>
-                    <div className="mt-1 flex items-baseline gap-1.5">
-                      <span className="text-sm font-bold text-foreground">₹{item.flash_price}</span>
-                      {item.flash_mrp > item.flash_price && (
-                        <span className="text-[10px] text-muted-foreground line-through">₹{item.flash_mrp}</span>
+                    <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                      <span className="text-sm font-bold text-foreground">₹{effectivePrice}</span>
+                      {item.flash_price > effectivePrice && (
+                        <span className="text-[10px] text-muted-foreground line-through">₹{item.flash_price}</span>
+                      )}
+                      {compareMrp > item.flash_price && (
+                        <span className="text-[10px] text-muted-foreground line-through">₹{compareMrp}</span>
                       )}
                     </div>
-                    <Button
-                      size="sm"
-                      className="mt-auto w-full text-xs h-8"
-                      onClick={() => handleAddToCart(item)}
-                    >
-                      Add to Cart
-                    </Button>
+                    <div className="mt-auto pt-2 flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs h-8 px-2"
+                        onClick={() => handleAddToCart(item)}
+                      >
+                        Add
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 text-xs h-8 px-2"
+                        onClick={() => handleAddToCart(item, true)}
+                      >
+                        Buy Now
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );
