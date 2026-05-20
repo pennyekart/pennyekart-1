@@ -151,17 +151,28 @@ const FlashSaleDetail = () => {
     fetchSale();
   }, [id]);
 
-  const handleAddToCart = (item: FlashProductItem) => {
+  const computeEffectivePrice = (flashPrice: number) => {
+    if (!sale || !sale.discount_value) return Math.max(0, Math.round(flashPrice));
+    const raw = sale.discount_type === "percentage"
+      ? flashPrice - (flashPrice * sale.discount_value / 100)
+      : flashPrice - sale.discount_value;
+    return Math.max(0, Math.round(raw));
+  };
+
+  const handleAddToCart = (item: FlashProductItem, navigateAfter = false) => {
+    const effectivePrice = computeEffectivePrice(item.flash_price);
+    const mrp = Math.max(item.flash_mrp, item.flash_price);
     addItem({
       id: item.actual_product_id,
       name: item.product_name || "Product",
-      price: item.flash_price,
-      mrp: item.flash_mrp,
+      price: effectivePrice,
+      mrp,
       image: item.product_image || "",
       category: item.product_category || undefined,
       source: item.source,
-    });
+    }, 1, { overridePrice: true });
     toast({ title: "Added to cart", description: `${item.product_name} added at flash sale price!` });
+    if (navigateAfter) navigate("/cart");
   };
 
   if (loading) {
