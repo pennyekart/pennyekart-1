@@ -41,16 +41,17 @@ const CountdownTimer = ({ endTime }: { endTime: string }) => {
   const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       {[
-        { val: timeLeft.h, label: "H" },
-        { val: timeLeft.m, label: "M" },
-        { val: timeLeft.s, label: "S" },
+        { val: timeLeft.h, label: "HRS" },
+        { val: timeLeft.m, label: "MIN" },
+        { val: timeLeft.s, label: "SEC" },
       ].map((t, i) => (
-        <div key={i} className="flex items-center gap-0.5">
-          {i > 0 && <span className="text-xs font-bold opacity-80">:</span>}
-          <div className="bg-background/20 backdrop-blur-sm rounded px-1.5 py-0.5 min-w-[28px] text-center">
-            <span className="text-sm md:text-base font-bold tabular-nums">{pad(t.val)}</span>
+        <div key={i} className="flex items-center gap-1">
+          {i > 0 && <span className="text-base font-black text-primary-foreground/90 -mt-2">:</span>}
+          <div className="bg-black/40 backdrop-blur-md rounded-lg px-2 py-1 md:px-2.5 md:py-1.5 min-w-[36px] md:min-w-[44px] text-center border border-white/20 shadow-lg">
+            <span className="block text-base md:text-xl font-black tabular-nums text-primary-foreground leading-none">{pad(t.val)}</span>
+            <span className="block text-[8px] md:text-[9px] font-bold tracking-widest text-primary-foreground/70 mt-0.5">{t.label}</span>
           </div>
         </div>
       ))}
