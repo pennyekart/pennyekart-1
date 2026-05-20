@@ -41,7 +41,7 @@ const Dashboard = () => {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
 
-      const tasks: { key: string; run: () => Promise<any> }[] = [];
+      const tasks: { key: string; run: () => PromiseLike<any> }[] = [];
 
       if (canSee("read_users")) {
         tasks.push({ key: "users", run: () => supabase.from("profiles").select("id", { count: "exact", head: true }) });
