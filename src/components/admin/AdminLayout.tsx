@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import AdminPendingOrdersNotification from "./AdminPendingOrdersNotification";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin", perm: null },
@@ -154,6 +155,8 @@ const AdminLayout = ({ children }: { children: ReactNode }) => {
       <div className="hidden flex-1 flex-col lg:flex">
         <main className="flex-1 p-6">{children}</main>
       </div>
+
+      <AdminPendingOrdersNotification />
     </div>
   );
 };
