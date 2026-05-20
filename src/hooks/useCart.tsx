@@ -43,11 +43,15 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(CART_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItem = useCallback((item: Omit<CartItem, "quantity">, qty = 1) => {
+  const addItem = useCallback((item: Omit<CartItem, "quantity">, qty = 1, options?: AddItemOptions) => {
     setItems(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {
-        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + qty } : i);
+        return prev.map(i => i.id === item.id
+          ? (options?.overridePrice
+              ? { ...existing, ...item, quantity: existing.quantity + qty }
+              : { ...i, quantity: i.quantity + qty })
+          : i);
       }
       return [...prev, { ...item, quantity: qty }];
     });
