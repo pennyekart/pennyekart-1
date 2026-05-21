@@ -103,10 +103,10 @@ const AdminPendingOrdersNotification = () => {
 
     if (list.length > 0 && (hadNew || prevCountRef.current === 0)) {
       playBeep();
-      if (settings.autoPopup) setOpen(true);
+      if (settings.autoPopup && !autoPopupSuppressed) setOpen(true);
     }
     prevCountRef.current = list.length;
-  }, [playBeep, settings.autoPopup]);
+  }, [playBeep, settings.autoPopup, autoPopupSuppressed]);
 
   useEffect(() => {
     if (!canSee || !settings.enabled) return;
