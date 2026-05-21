@@ -253,7 +253,91 @@ export const TodaysWorkSection = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Attendance summary for the visible month */}
+        {/* View toggle */}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={viewMode === "day" ? "default" : "outline"}
+            onClick={() => setViewMode("day")}
+            className="h-7 text-xs"
+          >
+            By Day
+          </Button>
+          <Button
+            size="sm"
+            variant={viewMode === "all" ? "default" : "outline"}
+            onClick={() => setViewMode("all")}
+            className="h-7 text-xs"
+          >
+            All Entries {allLogs.length > 0 && `(${allLogs.length})`}
+          </Button>
+        </div>
+
+        {viewMode === "all" ? (
+          <div className="space-y-2">
+            {allLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            ) : allLogs.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-3">No work logs yet.</p>
+            ) : (
+              allLogs.map((log) => (
+                <div key={log.id} className="rounded-lg border bg-muted/20 p-3 text-sm space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="text-[10px]">{format(new Date(log.work_date), "dd MMM yyyy")}</Badge>
+                      <span className="text-[11px] text-muted-foreground">
+                        {format(new Date(log.created_at), "HH:mm")}
+                        {log.updated_at !== log.created_at && (
+                          <span className="ml-1">(edited)</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex gap-1">
+                      {editingId !== log.id && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditingId(log.id); setEditingText(log.work_details); }}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete work log?</AlertDialogTitle>
+                            <AlertDialogDescription>This will be removed from e-Life Society too.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(log.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                  {editingId === log.id ? (
+                    <div className="space-y-2">
+                      <Textarea value={editingText} onChange={(e) => setEditingText(e.target.value)} rows={3} className="resize-none" />
+                      <div className="flex gap-2 justify-end">
+                        <Button size="sm" variant="outline" onClick={() => { setEditingId(null); setEditingText(""); }}>Cancel</Button>
+                        <Button size="sm" onClick={() => handleUpdateAll(log.id)} disabled={saving}>
+                          {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap text-sm">{log.work_details}</p>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+        <>
+
         <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="text-xs font-medium text-muted-foreground">
