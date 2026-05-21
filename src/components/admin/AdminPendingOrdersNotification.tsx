@@ -59,6 +59,9 @@ const AdminPendingOrdersNotification = () => {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [autoPopupSuppressed, setAutoPopupSuppressed] = useState<boolean>(() => {
+    try { return sessionStorage.getItem(SUPPRESS_KEY) === "1"; } catch { return false; }
+  });
   const prevCountRef = useRef(0);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
