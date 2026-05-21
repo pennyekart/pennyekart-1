@@ -18,6 +18,7 @@ import Dashboard from "./pages/admin/Dashboard";
 import UsersPage from "./pages/admin/UsersPage";
 import RolesPage from "./pages/admin/RolesPage";
 import ProductsPage from "./pages/admin/ProductsPage";
+import CombosPage from "./pages/admin/CombosPage";
 import OrdersPage from "./pages/admin/OrdersPage";
 import BannersPage from "./pages/admin/BannersPage";
 import CategoriesPage from "./pages/admin/CategoriesPage";
