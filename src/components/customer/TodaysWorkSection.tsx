@@ -465,6 +465,8 @@ export const TodaysWorkSection = () => {
           setTotalAgents={setTotalAgents}
           defaultPanchayath={agent.panchayath_id || ""}
         />
+        </>
+        )}
       </CardContent>
     </Card>
   );
