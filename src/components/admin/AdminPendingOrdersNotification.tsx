@@ -219,6 +219,21 @@ const AdminPendingOrdersNotification = () => {
             {orders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">No pending orders.</p>
             )}
+            {orders.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    try { sessionStorage.setItem(SUPPRESS_KEY, "1"); } catch {}
+                    setAutoPopupSuppressed(true);
+                    setOpen(false);
+                  }}
+                >
+                  Show me Later
+                </Button>
+              </div>
+            )}
             {orders.map((order) => (
               <div key={order.id} className="border rounded-lg p-3 space-y-2 bg-accent/30">
                 <div className="flex items-center justify-between">
