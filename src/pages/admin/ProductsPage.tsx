@@ -518,6 +518,9 @@ const ProductsPage = () => {
     <AdminLayout>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Products</h1>
+        <Button variant="outline" onClick={() => navigate("/admin/combos")}>
+          <Plus className="h-4 w-4 mr-1" /> Manage Combos
+        </Button>
       </div>
 
       <Tabs defaultValue="own">
