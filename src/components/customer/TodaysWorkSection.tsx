@@ -166,8 +166,33 @@ export const TodaysWorkSection = () => {
     const r = await callFn({ method: "DELETE", query: { id } });
     if (!r.ok) { toast.error(r.body?.error || "Failed to delete"); return; }
     setLogs((prev) => prev.filter((l) => l.id !== id));
+    setAllLogs((prev) => prev.filter((l) => l.id !== id));
     refreshMonth();
     toast.success("Deleted");
+  };
+
+  const loadAll = useCallback(async () => {
+    setAllLoading(true);
+    const r = await callFn({ method: "GET", query: { all: "1" } });
+    if (r.ok) setAllLogs(r.body.logs || []);
+    setAllLoading(false);
+  }, [agent?.id]);
+
+  useEffect(() => {
+    if (viewMode === "all" && agent) loadAll();
+  }, [viewMode, agent?.id, loadAll]);
+
+  const handleUpdateAll = async (id: string) => {
+    if (!editingText.trim()) return;
+    setSaving(true);
+    const r = await callFn({ method: "PUT", body: { id, work_details: editingText.trim() } });
+    setSaving(false);
+    if (!r.ok) { toast.error(r.body?.error || "Failed to update"); return; }
+    setAllLogs((prev) => prev.map((l) => (l.id === id ? r.body.log : l)));
+    setLogs((prev) => prev.map((l) => (l.id === id ? r.body.log : l)));
+    setEditingId(null);
+    setEditingText("");
+    toast.success("Updated");
   };
 
   if (checking) {
