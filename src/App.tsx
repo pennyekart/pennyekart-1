@@ -77,6 +77,7 @@ const AppRoutes = () => {
       <Route path="/admin/users" element={<ProtectedRoute requirePermission="read_users"><UsersPage /></ProtectedRoute>} />
       <Route path="/admin/roles" element={<ProtectedRoute requireSuperAdmin><RolesPage /></ProtectedRoute>} />
       <Route path="/admin/products" element={<ProtectedRoute requirePermission="read_products"><ProductsPage /></ProtectedRoute>} />
+      <Route path="/admin/combos" element={<ProtectedRoute requirePermission="read_products"><CombosPage /></ProtectedRoute>} />
       <Route path="/admin/orders" element={<ProtectedRoute requirePermission="read_orders"><OrdersPage /></ProtectedRoute>} />
       <Route path="/admin/banners" element={<ProtectedRoute requirePermission="read_banners"><BannersPage /></ProtectedRoute>} />
       <Route path="/admin/categories" element={<ProtectedRoute requirePermission="read_categories"><CategoriesPage /></ProtectedRoute>} />
