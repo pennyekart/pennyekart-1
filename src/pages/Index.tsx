@@ -271,6 +271,7 @@ const Index = () => {
         <BannerCarousel />
         <ScratchCardWidget />
         <GroceryCategories onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
+        <ComboOffersSection />
         {renderSectionProducts()}
       </main>
 
