@@ -110,11 +110,14 @@ serve(async (req) => {
         return json(200, { totalAgents: allAgents.length, present, absent });
       }
 
-      // List logs for this agent, optionally filtered by date or month
+      // List logs for this agent, optionally filtered by date or month, or all logs
       const date = url.searchParams.get("date"); // YYYY-MM-DD
       const month = url.searchParams.get("month"); // YYYY-MM
+      const all = url.searchParams.get("all"); // "1" for all logs
       let q = `agent_id=eq.${agent.id}&order=work_date.desc,created_at.desc`;
-      if (date) q += `&work_date=eq.${date}`;
+      if (all === "1") {
+        // no extra filter
+      } else if (date) q += `&work_date=eq.${date}`;
       else if (month) q += `&work_date=gte.${month}-01&work_date=lt.${nextMonth(month)}-01`;
       const r = await fetch(`${elifeUrl}/rest/v1/agent_work_logs?${q}`, { headers: elifeHeaders });
       if (!r.ok) return json(502, { error: "fetch failed", details: await r.text() });

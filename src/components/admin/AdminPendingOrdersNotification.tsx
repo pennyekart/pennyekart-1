@@ -26,6 +26,7 @@ interface PendingOrder {
 
 const PENDING_STATUSES = ["pending", "seller_confirmation_pending"];
 const SETTINGS_KEY = "admin_pending_orders_notify";
+const SUPPRESS_KEY = "admin_pending_orders_suppress_session";
 
 interface Settings {
   enabled: boolean;
@@ -58,6 +59,9 @@ const AdminPendingOrdersNotification = () => {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [autoPopupSuppressed, setAutoPopupSuppressed] = useState<boolean>(() => {
+    try { return sessionStorage.getItem(SUPPRESS_KEY) === "1"; } catch { return false; }
+  });
   const prevCountRef = useRef(0);
   const seenIdsRef = useRef<Set<string>>(new Set());
 
@@ -99,10 +103,10 @@ const AdminPendingOrdersNotification = () => {
 
     if (list.length > 0 && (hadNew || prevCountRef.current === 0)) {
       playBeep();
-      if (settings.autoPopup) setOpen(true);
+      if (settings.autoPopup && !autoPopupSuppressed) setOpen(true);
     }
     prevCountRef.current = list.length;
-  }, [playBeep, settings.autoPopup]);
+  }, [playBeep, settings.autoPopup, autoPopupSuppressed]);
 
   useEffect(() => {
     if (!canSee || !settings.enabled) return;
@@ -214,6 +218,21 @@ const AdminPendingOrdersNotification = () => {
           <div className="space-y-3">
             {orders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">No pending orders.</p>
+            )}
+            {orders.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    try { sessionStorage.setItem(SUPPRESS_KEY, "1"); } catch {}
+                    setAutoPopupSuppressed(true);
+                    setOpen(false);
+                  }}
+                >
+                  Show me Later
+                </Button>
+              </div>
             )}
             {orders.map((order) => (
               <div key={order.id} className="border rounded-lg p-3 space-y-2 bg-accent/30">
