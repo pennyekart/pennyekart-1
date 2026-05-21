@@ -42,6 +42,9 @@ export const TodaysWorkSection = () => {
   const [editingText, setEditingText] = useState("");
   const [monthLogs, setMonthLogs] = useState<WorkLog[]>([]);
   const [monthCursor, setMonthCursor] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<"day" | "all">("day");
+  const [allLogs, setAllLogs] = useState<WorkLog[]>([]);
+  const [allLoading, setAllLoading] = useState(false);
 
   // Absent details state
   const [panchayaths, setPanchayaths] = useState<Panchayath[]>([]);
