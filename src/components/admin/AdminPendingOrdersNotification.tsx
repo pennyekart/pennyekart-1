@@ -26,6 +26,7 @@ interface PendingOrder {
 
 const PENDING_STATUSES = ["pending", "seller_confirmation_pending"];
 const SETTINGS_KEY = "admin_pending_orders_notify";
+const SUPPRESS_KEY = "admin_pending_orders_suppress_session";
 
 interface Settings {
   enabled: boolean;
