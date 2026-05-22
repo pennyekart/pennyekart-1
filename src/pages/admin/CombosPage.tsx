@@ -51,12 +51,17 @@ const CombosPage = () => {
 
   const load = async () => {
     setLoading(true);
-    const [c, p] = await Promise.all([
+    const [c, p, sp] = await Promise.all([
       (supabase as any).from("product_combos").select("*").order("sort_order").order("created_at", { ascending: false }),
       supabase.from("products").select("id, name, image_url, mrp, price").eq("is_active", true).order("name"),
+      supabase.from("seller_products").select("id, name, image_url, mrp, price").eq("is_active", true).eq("is_approved", true).order("name"),
     ]);
     setCombos((c.data || []) as Combo[]);
-    setProducts((p.data || []) as Product[]);
+    const merged: Product[] = [
+      ...((p.data || []) as any[]).map((x) => ({ ...x, source: "admin" as const })),
+      ...((sp.data || []) as any[]).map((x) => ({ ...x, source: "seller" as const })),
+    ];
+    setProducts(merged);
     setLoading(false);
   };
 
