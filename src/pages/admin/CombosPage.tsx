@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-type Product = { id: string; name: string; image_url: string | null; mrp: number; price: number };
+type Product = { id: string; name: string; image_url: string | null; mrp: number; price: number; source: "admin" | "seller" };
 type Combo = {
   id: string;
   name: string;
@@ -51,12 +51,17 @@ const CombosPage = () => {
 
   const load = async () => {
     setLoading(true);
-    const [c, p] = await Promise.all([
+    const [c, p, sp] = await Promise.all([
       (supabase as any).from("product_combos").select("*").order("sort_order").order("created_at", { ascending: false }),
       supabase.from("products").select("id, name, image_url, mrp, price").eq("is_active", true).order("name"),
+      supabase.from("seller_products").select("id, name, image_url, mrp, price").eq("is_active", true).eq("is_approved", true).order("name"),
     ]);
     setCombos((c.data || []) as Combo[]);
-    setProducts((p.data || []) as Product[]);
+    const merged: Product[] = [
+      ...((p.data || []) as any[]).map((x) => ({ ...x, source: "admin" as const })),
+      ...((sp.data || []) as any[]).map((x) => ({ ...x, source: "seller" as const })),
+    ];
+    setProducts(merged);
     setLoading(false);
   };
 
@@ -233,7 +238,12 @@ const CombosPage = () => {
                         className="w-full flex items-center gap-2 p-1.5 hover:bg-muted rounded text-left">
                         {p.image_url ? <img src={p.image_url} alt="" className="w-8 h-8 rounded object-cover" /> : <Package className="h-4 w-4" />}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{p.name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs font-medium truncate">{p.name}</p>
+                            <Badge variant={p.source === "seller" ? "outline" : "secondary"} className="text-[9px] py-0 px-1 h-4 shrink-0">
+                              {p.source === "seller" ? "Seller" : "Own"}
+                            </Badge>
+                          </div>
                           <p className="text-[10px] text-muted-foreground">₹{p.price} / MRP ₹{p.mrp}</p>
                         </div>
                         <Plus className="h-3.5 w-3.5 text-muted-foreground" />
