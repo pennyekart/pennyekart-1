@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-type Product = { id: string; name: string; image_url: string | null; mrp: number; price: number };
+type Product = { id: string; name: string; image_url: string | null; mrp: number; price: number; source: "admin" | "seller" };
 type Combo = {
   id: string;
   name: string;
