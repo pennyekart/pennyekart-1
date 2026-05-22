@@ -65,12 +65,13 @@ export const ComboOffersSection = () => {
     setComboItems(it);
     if (it.length > 0) {
       const ids = it.map((i) => i.product_id);
-      const { data: prods } = await supabase
-        .from("products")
-        .select("id, name, image_url, mrp, price")
-        .in("id", ids);
+      const [prodsRes, sellerRes] = await Promise.all([
+        supabase.from("products").select("id, name, image_url, mrp, price").in("id", ids),
+        supabase.from("seller_products").select("id, name, image_url, mrp, price").in("id", ids),
+      ]);
       const map: Record<string, Product> = {};
-      (prods || []).forEach((p: any) => { map[p.id] = p; });
+      (prodsRes.data || []).forEach((p: any) => { map[p.id] = p; });
+      (sellerRes.data || []).forEach((p: any) => { if (!map[p.id]) map[p.id] = p; });
       setProductsMap(map);
     }
     setDetailLoading(false);
