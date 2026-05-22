@@ -238,7 +238,12 @@ const CombosPage = () => {
                         className="w-full flex items-center gap-2 p-1.5 hover:bg-muted rounded text-left">
                         {p.image_url ? <img src={p.image_url} alt="" className="w-8 h-8 rounded object-cover" /> : <Package className="h-4 w-4" />}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium truncate">{p.name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs font-medium truncate">{p.name}</p>
+                            <Badge variant={p.source === "seller" ? "outline" : "secondary"} className="text-[9px] py-0 px-1 h-4 shrink-0">
+                              {p.source === "seller" ? "Seller" : "Own"}
+                            </Badge>
+                          </div>
                           <p className="text-[10px] text-muted-foreground">₹{p.price} / MRP ₹{p.mrp}</p>
                         </div>
                         <Plus className="h-3.5 w-3.5 text-muted-foreground" />
