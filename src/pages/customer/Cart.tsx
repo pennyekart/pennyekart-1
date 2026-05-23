@@ -549,68 +549,130 @@ const Cart = () => {
                   </p>
                 </div>
               )}
-              {items.map(item => (
-                <div key={item.id} className="p-4">
-                  <div className="flex gap-4">
-                    {/* Image */}
-                    <img
-                      src={item.image || "/placeholder.svg"}
-                      alt={item.name}
-                      className="h-24 w-24 shrink-0 cursor-pointer rounded-md object-cover bg-muted"
-                      onClick={() => navigate(`/product/${item.id}`)}
-                    />
-                    {/* Info */}
-                    <div className="flex flex-1 flex-col gap-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="line-clamp-2 text-sm text-foreground">{item.name}</span>
-                        {item.coming_soon && (
-                          <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning border border-warning/30">
-                            <Clock className="h-3 w-3" /> Coming Soon
+              {(() => {
+                // Build render groups: combos first as bundled blocks, regular items as individual lines
+                const seenCombos = new Set<string>();
+                const blocks: Array<{ kind: "single"; item: typeof items[number] } | { kind: "combo"; instanceId: string; comboName: string; comboPrice: number; lines: typeof items }> = [];
+                for (const it of items) {
+                  if (it.combo_instance_id) {
+                    if (seenCombos.has(it.combo_instance_id)) continue;
+                    seenCombos.add(it.combo_instance_id);
+                    const lines = items.filter(x => x.combo_instance_id === it.combo_instance_id);
+                    const comboPrice = it.combo_price ?? lines.reduce((s, l) => s + l.price * l.quantity, 0);
+                    blocks.push({ kind: "combo", instanceId: it.combo_instance_id, comboName: it.combo_name || "Combo", comboPrice, lines });
+                  } else {
+                    blocks.push({ kind: "single", item: it });
+                  }
+                }
+                return blocks.map((b) => {
+                  if (b.kind === "combo") {
+                    const totalMrpCombo = b.lines.reduce((s, l) => s + Math.max(l.mrp, l.price) * l.quantity, 0);
+                    return (
+                      <div key={b.instanceId} className="p-4 bg-gradient-to-br from-amber-50/40 to-emerald-50/40 dark:from-amber-950/20 dark:to-emerald-950/20">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-500 to-emerald-600 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                            Combo • {b.comboName}
                           </span>
-                        )}
+                          <button
+                            onClick={() => removeCombo(b.instanceId)}
+                            className="text-xs font-semibold uppercase tracking-wide text-destructive hover:underline"
+                          >
+                            Remove Combo
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {b.lines.map((l) => (
+                            <div key={l.id} className="flex gap-3 items-center">
+                              <img
+                                src={l.image || "/placeholder.svg"}
+                                alt={l.name}
+                                className="h-14 w-14 shrink-0 rounded-md object-cover bg-muted"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-foreground line-clamp-2">{l.name}</p>
+                                <p className="text-xs text-muted-foreground">Qty: {l.quantity}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex items-baseline justify-between rounded-md border border-border bg-card px-3 py-2">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Combo Price</span>
+                          <div className="flex items-baseline gap-2">
+                            {totalMrpCombo > b.comboPrice && (
+                              <span className="text-xs text-muted-foreground line-through">₹{totalMrpCombo}</span>
+                            )}
+                            <span className="text-base font-bold text-foreground">₹{b.comboPrice}</span>
+                          </div>
+                        </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground">Combo items and price are fixed and cannot be modified.</p>
                       </div>
-                      <div className="mt-1 flex items-baseline gap-2">
-                        {Math.max(item.mrp, item.price) > item.price && (
-                          <span className="text-xs text-muted-foreground line-through">₹{Math.max(item.mrp, item.price)}</span>
-                        )}
-                        <span className="text-base font-bold text-foreground">₹{item.price}</span>
-                        {Math.max(item.mrp, item.price) > item.price && (
-                          <span className="text-xs font-medium text-secondary">
-                            {Math.round(((Math.max(item.mrp, item.price) - item.price) / Math.max(item.mrp, item.price)) * 100)}% off
-                          </span>
-                        )}
+                    );
+                  }
+                  const item = b.item;
+                  return (
+                    <div key={item.id} className="p-4">
+                      <div className="flex gap-4">
+                        {/* Image */}
+                        <img
+                          src={item.image || "/placeholder.svg"}
+                          alt={item.name}
+                          className="h-24 w-24 shrink-0 cursor-pointer rounded-md object-cover bg-muted"
+                          onClick={() => navigate(`/product/${item.id}`)}
+                        />
+                        {/* Info */}
+                        <div className="flex flex-1 flex-col gap-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="line-clamp-2 text-sm text-foreground">{item.name}</span>
+                            {item.coming_soon && (
+                              <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning border border-warning/30">
+                                <Clock className="h-3 w-3" /> Coming Soon
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            {Math.max(item.mrp, item.price) > item.price && (
+                              <span className="text-xs text-muted-foreground line-through">₹{Math.max(item.mrp, item.price)}</span>
+                            )}
+                            <span className="text-base font-bold text-foreground">₹{item.price}</span>
+                            {Math.max(item.mrp, item.price) > item.price && (
+                              <span className="text-xs font-medium text-secondary">
+                                {Math.round(((Math.max(item.mrp, item.price) - item.price) / Math.max(item.mrp, item.price)) * 100)}% off
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Quantity & actions */}
-                  <div className="mt-3 flex items-center gap-3">
-                    <div className="flex items-center rounded-md border border-border">
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-muted"
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="flex h-8 w-10 items-center justify-center border-x border-border text-sm font-semibold">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-muted"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
+                      {/* Quantity & actions */}
+                      <div className="mt-3 flex items-center gap-3">
+                        <div className="flex items-center rounded-md border border-border">
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-muted"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="flex h-8 w-10 items-center justify-center border-x border-border text-sm font-semibold">
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            className="flex h-8 w-8 items-center justify-center text-muted-foreground hover:bg-muted"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-destructive"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-destructive"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
 
             {/* Place Order - bottom of left card (mobile) */}
