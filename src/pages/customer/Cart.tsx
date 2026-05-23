@@ -18,7 +18,7 @@ import { useDeliveryCharge } from "@/hooks/useDeliveryCharge";
 const Cart = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { items, updateQuantity, removeItem, clearCart, totalPrice, totalItems } = useCart();
+  const { items, updateQuantity, removeItem, removeCombo, clearCart, totalPrice, totalItems } = useCart();
   const { user } = useAuth();
   const [showPayment, setShowPayment] = useState(false);
   const [showAddressDialog, setShowAddressDialog] = useState(false);
