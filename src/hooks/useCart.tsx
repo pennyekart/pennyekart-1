@@ -11,6 +11,13 @@ export interface CartItem {
   source?: "product" | "seller_product";
   seller_id?: string;
   coming_soon?: boolean;
+  // Combo metadata
+  product_id?: string;
+  combo_id?: string;
+  combo_instance_id?: string;
+  combo_name?: string;
+  combo_price?: number;
+  combo_locked?: boolean;
 }
 
 interface AddItemOptions {
@@ -21,6 +28,7 @@ interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, qty?: number, options?: AddItemOptions) => void;
   removeItem: (id: string) => void;
+  removeCombo: (combo_instance_id: string) => void;
   updateQuantity: (id: string, qty: number) => void;
   clearCart: () => void;
   totalItems: number;
