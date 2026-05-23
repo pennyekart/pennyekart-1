@@ -127,8 +127,8 @@ const AdminPendingOrdersNotification = () => {
 
   return (
     <>
-      {/* Floating bell */}
-      <div className="fixed bottom-20 right-3 sm:right-4 z-50 flex flex-col items-end gap-2">
+      {/* Floating bell — left on mobile to avoid ChatBot overlap, right on desktop */}
+      <div className="fixed bottom-20 left-3 sm:left-auto sm:right-4 z-50 flex flex-col items-start sm:items-end gap-2">
         <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
           <PopoverTrigger asChild>
             <Button
