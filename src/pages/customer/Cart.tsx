@@ -255,7 +255,7 @@ const Cart = () => {
       // Check regular products (non-seller) against godown_stock
       const regularItems = items.filter(i => i.source !== "seller_product");
       if (regularItems.length > 0) {
-        const regularIds = regularItems.map(i => i.id);
+        const regularIds = regularItems.map(i => i.product_id || i.id);
         const { data: stockData } = await supabase
           .from("godown_stock")
           .select("product_id, quantity")
@@ -269,7 +269,10 @@ const Cart = () => {
           stockMap.set(s.product_id, (stockMap.get(s.product_id) || 0) + s.quantity);
         });
 
-        const unavailable = regularItems.filter(i => !stockMap.has(i.id) || (stockMap.get(i.id) || 0) < i.quantity);
+        const unavailable = regularItems.filter(i => {
+          const pid = i.product_id || i.id;
+          return !stockMap.has(pid) || (stockMap.get(pid) || 0) < i.quantity;
+        });
         if (unavailable.length > 0) {
           const names = unavailable.map(i => i.name).join(", ");
           toast.error(`Not available in your area: ${names}. Please remove them to proceed.`);
