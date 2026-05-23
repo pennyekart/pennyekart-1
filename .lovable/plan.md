@@ -1,52 +1,47 @@
-# Fix Panchayath / Ward filters on "Absent Details"
+# Combo billing fix in cart
 
-The "Absent Details" view doesn't exist yet on `/customer/profile?tab=profile` — only the agent's own `TodaysWorkSection` is rendered, and it has no panchayath/ward filter. So nothing can drive the filter today. Plan: build the Absent Details panel inside `TodaysWorkSection` and wire the filters end-to-end.
+## Problem
+When a combo is added to the cart, each included product is inserted as a separate cart line at its own `unit_price`. The cart then bills the **sum of individual unit prices**, which can differ from the combo's discounted `combo_price`. Customers can also change quantity or remove individual combo items, breaking the bundle.
 
-## What you'll see in the UI
+## Goal
+1. Combo always bills at `combo_price` (one fixed amount), regardless of the unit prices of its items.
+2. Customer cannot edit quantity or remove a single product inside a combo. They can only remove the whole combo.
 
-Inside `TodaysWorkSection` (only when the caller is an agent), add a new collapsible card titled **"Absent Details — ഹാജരാകാത്തവരുടെ വിശദാംശങ്ങൾ"** with:
+## Approach (frontend-only)
 
-- Date picker (defaults to selected date in the parent card).
-- **Panchayath** Select (loaded from `locations_local_bodies`, default = caller's panchayath).
-- **Ward** Select (loaded from the chosen panchayath's `ward_count`, "All wards" option).
-- A list of agents in that panchayath/ward who have **no** `agent_work_logs` row for the chosen date, showing name, role, mobile (with WhatsApp/call link), and ward.
-- A "Refresh" button + present/absent counters.
+### 1. Extend `CartItem` (src/hooks/useCart.tsx)
+Add optional fields to each cart item:
+- `combo_id?: string` — combo definition id
+- `combo_instance_id?: string` — unique id per "added combo" (so the same combo added twice stays as two separate bundles)
+- `combo_name?: string`
+- `combo_locked?: boolean` — when true, quantity controls and individual remove are disabled
 
-Filters update the list immediately; changing panchayath resets the ward to "All".
+Add a helper `removeCombo(combo_instance_id)` that filters out all items sharing that id.
 
-## Data flow
+### 2. Update `ComboOffersSection.addComboToCart` (src/components/customer/ComboOffersSection.tsx)
+When adding a combo:
+- Generate one `combo_instance_id` (e.g. `crypto.randomUUID()`).
+- Distribute `combo.combo_price` across the combo items proportionally to `unit_price * quantity`, so the **sum of `price * quantity` across the line items exactly equals `combo_price`** (rounded to 2 decimals, with last item absorbing the rounding remainder).
+- Push each item with `combo_id`, `combo_instance_id`, `combo_name`, `combo_locked: true`, and `mrp` kept as the original product mrp so MRP savings still display correctly.
+- To allow the same combo to coexist with the same product added separately, use a composite cart `id` of `${product_id}__${combo_instance_id}` for combo lines (regular product lines keep plain `id`). This sidesteps the existing "merge by id" logic in `addItem`.
 
-Extend the existing `agent-work-logs` edge function with a new GET mode:
+### 3. Update `Cart.tsx` rendering
+- Group items by `combo_instance_id` when present; render a single bordered card per combo with header `Combo: <combo_name>` and a single **Remove Combo** button (calls `removeCombo`).
+- Inside the group, list each included product (image, name, qty) but hide the +/- buttons, the individual Remove button, and the per-item price/discount strip.
+- Show the combo total as one line: `Combo price: ₹<combo_price>` (computed as the sum of the line `price * quantity` within the group, which equals `combo_price` by construction).
+- Non-combo items render exactly as today.
 
-`GET /agent-work-logs?absent=1&date=YYYY-MM-DD&panchayath=<elife_panchayath_id>&ward=<n>`
+### 4. Stock & checkout
+No business-logic changes:
+- Stock checks in `handlePlaceOrder` already key off `item.id` and `item.source`. Because combo lines use `${product_id}__${combo_instance_id}`, add a small shim: when checking stock and when mapping `mapOrderItems`, use `item.combo_id ? <real product_id from item> : item.id`. Store the real product id on the cart line as `product_id` so we don't have to parse the composite id.
+- `totalPrice` (sum of `price * quantity`) automatically equals combo_price for that bundle, so subtotal, discounts, delivery, wallet, and order insertion all stay correct without further math changes.
+- `mapOrderItems` will include `combo_id` and `combo_name` in the stored `items` JSON so admin/order views can show the combo grouping later.
 
-Logic:
-1. Auth as today (caller must be a registered agent — reuse current lookup).
-2. From e-Life, fetch `pennyekart_agents` filtered by `panchayath_id=eq.<…>` (and `ward=eq.<n>` when provided), `is_active=true`.
-3. Fetch `agent_work_logs?work_date=eq.<date>&agent_id=in.(<ids>)` and build a present-set.
-4. Return `{ totalAgents, present: [...], absent: [{id,name,role,mobile,ward,panchayath_id}] }`.
-
-If e-Life `pennyekart_agents` doesn't expose `ward`/`panchayath_id` we'll fall back to whatever fields exist (the chat edge function already references `agent.panchayath_id`, so panchayath is available; ward filter will be skipped gracefully if absent and the UI will hide the Ward Select in that case).
-
-Mapping panchayath: the local Supabase `locations_local_bodies.id` is **not** the same as e-Life's `panchayath_id`. To make the UI Select usable we'll fetch the panchayath list from e-Life via a small extension to the edge function:
-
-`GET /agent-work-logs?panchayaths=1` → returns `[{ id, name, ward_count }]` from e-Life `panchayaths` table. The Select then sends e-Life IDs straight back to the absent endpoint, so filters actually match.
-
-## Files to change
-
-- `supabase/functions/agent-work-logs/index.ts` — add `panchayaths=1` and `absent=1` GET branches; keep existing behaviour intact.
-- `src/components/customer/TodaysWorkSection.tsx` — add the new "Absent Details" card with Panchayath + Ward Selects, fetch logic, list rendering, and Malayalam title. Default panchayath = caller agent's `panchayath_id` returned from `/agent`.
-- `src/components/customer/TodaysWorkSection.tsx` (small) — extend the agent payload returned from the existing GET to include `panchayath_id` and `ward` so we can preselect filters.
-
-## Acceptance
-
-- Selecting a different panchayath or ward immediately re-queries and shows a different absent list.
-- "All wards" returns every ward in the panchayath.
-- Empty state ("Everyone is present 🎉") when the absent array is empty.
-- Caller still sees their own work card unchanged above the new section.
+## Files touched
+- `src/hooks/useCart.tsx` — extend type, add `removeCombo`, accept composite ids.
+- `src/components/customer/ComboOffersSection.tsx` — proportional price distribution + combo metadata when adding to cart.
+- `src/pages/customer/Cart.tsx` — group-render combo items, lock controls, single remove button; pass `product_id` (not composite id) into stock checks and order items.
 
 ## Out of scope
-
-- Editing other agents' logs.
-- Persisting filter selection across reloads.
-- Adding panchayath/ward filters anywhere outside `TodaysWorkSection`.
+- No DB migrations. No admin/order-page changes beyond the extra fields naturally appearing in `orders.items` JSON.
+- Existing combos already in users' carts (added before this change) will continue to behave as separate items; only newly added combos get the new behavior.
