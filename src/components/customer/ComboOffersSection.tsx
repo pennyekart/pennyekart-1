@@ -79,17 +79,45 @@ export const ComboOffersSection = () => {
 
   const addComboToCart = () => {
     if (!selectedCombo || comboItems.length === 0) return;
-    comboItems.forEach((it) => {
+    const instanceId = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+      ? crypto.randomUUID()
+      : `combo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    // Distribute combo_price proportionally to (unit_price * quantity)
+    const weights = comboItems.map((it) => Math.max(0, it.unit_price) * Math.max(1, it.quantity));
+    const weightSum = weights.reduce((s, w) => s + w, 0) || 1;
+    const totalCents = Math.round(selectedCombo.combo_price * 100);
+    const perLineCents: number[] = [];
+    let allocated = 0;
+    comboItems.forEach((it, idx) => {
+      if (idx === comboItems.length - 1) {
+        perLineCents.push(totalCents - allocated);
+      } else {
+        const share = Math.round((totalCents * weights[idx]) / weightSum);
+        perLineCents.push(share);
+        allocated += share;
+      }
+    });
+
+    comboItems.forEach((it, idx) => {
       const p = productsMap[it.product_id];
       if (!p) return;
+      const linePriceTotal = perLineCents[idx] / 100; // total for this line (covers it.quantity units)
+      const unitPrice = Math.round((linePriceTotal / Math.max(1, it.quantity)) * 100) / 100;
       addItem(
         {
-          id: p.id,
+          id: `${p.id}__${instanceId}`,
+          product_id: p.id,
           name: p.name,
-          price: it.unit_price,
+          price: unitPrice,
           mrp: p.mrp || it.unit_price,
           image: p.image_url || "",
           source: "product",
+          combo_id: selectedCombo.id,
+          combo_instance_id: instanceId,
+          combo_name: selectedCombo.name,
+          combo_price: selectedCombo.combo_price,
+          combo_locked: true,
         },
         it.quantity,
         { overridePrice: true }
@@ -98,6 +126,7 @@ export const ComboOffersSection = () => {
     toast.success(`${selectedCombo.name} added to cart at combo price`);
     setSelectedCombo(null);
   };
+
 
   if (loading || combos.length === 0) return null;
 

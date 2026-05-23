@@ -11,6 +11,13 @@ export interface CartItem {
   source?: "product" | "seller_product";
   seller_id?: string;
   coming_soon?: boolean;
+  // Combo metadata
+  product_id?: string;
+  combo_id?: string;
+  combo_instance_id?: string;
+  combo_name?: string;
+  combo_price?: number;
+  combo_locked?: boolean;
 }
 
 interface AddItemOptions {
@@ -21,6 +28,7 @@ interface CartContextType {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, qty?: number, options?: AddItemOptions) => void;
   removeItem: (id: string) => void;
+  removeCombo: (combo_instance_id: string) => void;
   updateQuantity: (id: string, qty: number) => void;
   clearCart: () => void;
   totalItems: number;
@@ -61,6 +69,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setItems(prev => prev.filter(i => i.id !== id));
   }, []);
 
+  const removeCombo = useCallback((combo_instance_id: string) => {
+    setItems(prev => prev.filter(i => i.combo_instance_id !== combo_instance_id));
+  }, []);
+
   const updateQuantity = useCallback((id: string, qty: number) => {
     if (qty <= 0) { removeItem(id); return; }
     setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
@@ -72,7 +84,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const totalPrice = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, totalItems, totalPrice }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, removeCombo, updateQuantity, clearCart, totalItems, totalPrice }}>
       {children}
     </CartContext.Provider>
   );
