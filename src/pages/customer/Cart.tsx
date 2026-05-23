@@ -359,13 +359,14 @@ const Cart = () => {
 
       const mapOrderItems = (orderItems: typeof items) =>
         orderItems.map(i => ({
-          id: i.id,
+          id: i.product_id || i.id,
           name: i.name,
           price: i.price,
           mrp: i.mrp,
           quantity: i.quantity,
           image: i.image,
           source: i.source || "product",
+          ...(i.combo_id ? { combo_id: i.combo_id, combo_name: i.combo_name, combo_instance_id: i.combo_instance_id } : {}),
         }));
 
       // Use finalAmount (the exact total shown to the user) and distribute proportionally across split orders
