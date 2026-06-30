@@ -148,13 +148,14 @@ const Dashboard = () => {
     const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
 
     try {
-      const orderCols = [
+      type Col = { key: string; label: string; render?: (v: any, row: any) => any };
+      const orderCols: Col[] = [
         { key: "id", label: "Order ID", render: (v: string) => `#${String(v).slice(0, 8)}` },
         { key: "status", label: "Status", render: (v: string) => (v ?? "").replace(/_/g, " ") },
         { key: "total", label: "Total", render: (v: number) => inr(Number(v ?? 0)) },
         { key: "created_at", label: "Date", render: (v: string) => fmtDate(v) },
       ];
-      const userCols = [
+      const userCols: Col[] = [
         { key: "full_name", label: "Name" },
         { key: "mobile_number", label: "Mobile" },
         { key: "user_type", label: "Type" },
@@ -162,7 +163,7 @@ const Dashboard = () => {
       ];
 
       let q: any = null;
-      let cols = orderCols;
+      let cols: Col[] = orderCols;
 
       switch (card.detailKey) {
         case "orders":
