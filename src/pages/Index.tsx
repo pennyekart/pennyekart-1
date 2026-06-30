@@ -10,6 +10,7 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 import FlashSaleBanner from "@/components/FlashSaleBanner";
 import Footer from "@/components/Footer";
 import CartReminderBanner from "@/components/CartReminderBanner";
+import CarbsBannerStrip from "@/components/CarbsBannerStrip";
 import WalletRewardPopup from "@/components/WalletRewardPopup";
 import OfferFlashPopup from "@/components/OfferFlashPopup";
 import ComboOffersSection from "@/components/customer/ComboOffersSection";
@@ -265,6 +266,7 @@ const Index = () => {
 
       <main className="relative z-0 space-y-2">
         <CartReminderBanner />
+        <CarbsBannerStrip />
         <FlashSaleBanner />
         <CategoryBar onCategoryClick={handleCategoryClick} selectedCategory={selectedCategory} />
         <SortFilterBar selected={sortBy} onChange={setSortBy} />
