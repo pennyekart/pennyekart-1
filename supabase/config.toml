@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.chat]
 verify_jwt = false
+
+[functions.pennycarbs-items]
+verify_jwt = false
