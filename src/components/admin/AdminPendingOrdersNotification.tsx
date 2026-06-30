@@ -210,17 +210,17 @@ const AdminPendingOrdersNotification = () => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-hidden rounded-2xl sm:rounded-2xl p-0 gap-0 border-0 shadow-2xl flex flex-col">
           {/* Header with animated gradient */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 via-orange-500 to-emerald-600 p-4 sm:p-5 text-white">
+          <div className="relative overflow-hidden bg-gradient-to-br from-[#0a1f44] via-[#0f5132] to-[#d4af37] p-4 sm:p-5 text-white">
             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,white,transparent_60%)]" />
-            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/10 blur-2xl animate-pulse" />
+            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-[#d4af37]/20 blur-2xl animate-pulse" />
             <DialogHeader className="space-y-1 relative">
               <DialogTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
                 <div className="relative">
                   <Package className="h-5 w-5 sm:h-6 sm:w-6" />
-                  <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-yellow-200 animate-pulse" />
+                  <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-[#ffd700] animate-pulse" />
                 </div>
                 <span className="font-bold tracking-tight">New Pending Orders</span>
-                <span className="ml-auto bg-white/25 backdrop-blur-sm text-white text-xs font-bold rounded-full min-w-6 h-6 px-2 flex items-center justify-center ring-2 ring-white/40 animate-pulse">
+                <span className="ml-auto bg-[#d4af37]/90 backdrop-blur-sm text-[#0a1f44] text-xs font-bold rounded-full min-w-6 h-6 px-2 flex items-center justify-center ring-2 ring-white/40 animate-pulse">
                   {orders.length}
                 </span>
               </DialogTitle>
@@ -231,6 +231,7 @@ const AdminPendingOrdersNotification = () => {
               </p>
             </DialogHeader>
           </div>
+
 
           <div className="p-3 sm:p-5 space-y-2 sm:space-y-3 overflow-y-auto flex-1">
             {orders.length === 0 && (
