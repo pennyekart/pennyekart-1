@@ -308,7 +308,7 @@ const AdminPendingOrdersNotification = () => {
               <Button
                 size="lg"
                 variant="outline"
-                className="flex-1 h-11 border-2 border-amber-400 text-amber-700 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-500 font-semibold shadow-sm"
+                className="flex-1 h-11 border-2 border-[#d4af37] text-[#0a1f44] hover:bg-[#d4af37]/10 hover:text-[#0a1f44] hover:border-[#b8860b] font-semibold shadow-sm"
                 onClick={() => {
                   try { sessionStorage.setItem(SUPPRESS_KEY, "1"); } catch {}
                   setAutoPopupSuppressed(true);
@@ -320,7 +320,7 @@ const AdminPendingOrdersNotification = () => {
               </Button>
               <Button
                 size="lg"
-                className="flex-1 h-11 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-md font-semibold"
+                className="flex-1 h-11 bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#d4af37] hover:opacity-90 text-white shadow-md font-semibold"
                 onClick={() => {
                   setOpen(false);
                   navigate("/admin/orders");
