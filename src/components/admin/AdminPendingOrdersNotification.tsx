@@ -196,11 +196,11 @@ const AdminPendingOrdersNotification = () => {
         {orders.length > 0 && (
           <button
             onClick={() => setOpen(true)}
-            className="relative flex items-center justify-center h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gradient-to-br from-amber-500 to-emerald-600 text-white shadow-lg shadow-amber-500/25 animate-bounce hover:animate-none transition-all hover:scale-105 active:scale-95"
+            className="relative flex items-center justify-center h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gradient-to-br from-[#0a1f44] via-[#0f5132] to-[#d4af37] text-white shadow-lg shadow-[#0a1f44]/40 animate-bounce hover:animate-none transition-all hover:scale-105 active:scale-95 ring-2 ring-[#d4af37]/40"
             title="Pending orders"
           >
             <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="absolute -top-1 -right-1 bg-gradient-to-br from-rose-500 to-red-600 text-white text-[10px] sm:text-xs font-bold rounded-full h-5 w-5 sm:h-6 sm:w-6 flex items-center justify-center shadow-md">
+            <span className="absolute -top-1 -right-1 bg-gradient-to-br from-[#d4af37] to-[#b8860b] text-[#0a1f44] text-[10px] sm:text-xs font-bold rounded-full h-5 w-5 sm:h-6 sm:w-6 flex items-center justify-center shadow-md ring-1 ring-white/60">
               {orders.length}
             </span>
           </button>
@@ -210,17 +210,17 @@ const AdminPendingOrdersNotification = () => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-hidden rounded-2xl sm:rounded-2xl p-0 gap-0 border-0 shadow-2xl flex flex-col">
           {/* Header with animated gradient */}
-          <div className="relative overflow-hidden bg-gradient-to-br from-amber-500 via-orange-500 to-emerald-600 p-4 sm:p-5 text-white">
+          <div className="relative overflow-hidden bg-gradient-to-br from-[#0a1f44] via-[#0f5132] to-[#d4af37] p-4 sm:p-5 text-white">
             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,white,transparent_60%)]" />
-            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/10 blur-2xl animate-pulse" />
+            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-[#d4af37]/20 blur-2xl animate-pulse" />
             <DialogHeader className="space-y-1 relative">
               <DialogTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
                 <div className="relative">
                   <Package className="h-5 w-5 sm:h-6 sm:w-6" />
-                  <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-yellow-200 animate-pulse" />
+                  <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-[#ffd700] animate-pulse" />
                 </div>
                 <span className="font-bold tracking-tight">New Pending Orders</span>
-                <span className="ml-auto bg-white/25 backdrop-blur-sm text-white text-xs font-bold rounded-full min-w-6 h-6 px-2 flex items-center justify-center ring-2 ring-white/40 animate-pulse">
+                <span className="ml-auto bg-[#d4af37]/90 backdrop-blur-sm text-[#0a1f44] text-xs font-bold rounded-full min-w-6 h-6 px-2 flex items-center justify-center ring-2 ring-white/40 animate-pulse">
                   {orders.length}
                 </span>
               </DialogTitle>
@@ -232,6 +232,7 @@ const AdminPendingOrdersNotification = () => {
             </DialogHeader>
           </div>
 
+
           <div className="p-3 sm:p-5 space-y-2 sm:space-y-3 overflow-y-auto flex-1">
             {orders.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">No pending orders.</p>
@@ -239,10 +240,10 @@ const AdminPendingOrdersNotification = () => {
             {orders.map((order) => (
               <div
                 key={order.id}
-                className="relative overflow-hidden rounded-xl border bg-card p-3 sm:p-4 space-y-2 sm:space-y-3 shadow-sm hover:shadow-md hover:border-amber-300 transition-all"
+                className="relative overflow-hidden rounded-xl border bg-card p-3 sm:p-4 space-y-2 sm:space-y-3 shadow-sm hover:shadow-md hover:border-[#d4af37] transition-all"
               >
                 {/* Gradient accent bar */}
-                <div className="absolute left-0 top-0 bottom-1 w-1 rounded-l-xl bg-gradient-to-b from-amber-500 to-emerald-600" />
+                <div className="absolute left-0 top-0 bottom-1 w-1 rounded-l-xl bg-gradient-to-b from-[#0a1f44] via-[#0f5132] to-[#d4af37]" />
 
                 {/* Top row: ID + Amount */}
                 <div className="flex items-center justify-between pl-2">
@@ -252,12 +253,12 @@ const AdminPendingOrdersNotification = () => {
                     </span>
                     <Badge
                       variant="outline"
-                      className="text-[10px] sm:text-xs h-5 border-amber-200 bg-amber-50 text-amber-700 hidden sm:inline-flex"
+                      className="text-[10px] sm:text-xs h-5 border-[#0a1f44]/30 bg-[#0a1f44]/5 text-[#0a1f44] hidden sm:inline-flex"
                     >
                       {order.status.replace(/_/g, " ")}
                     </Badge>
                   </div>
-                  <span className="text-sm sm:text-base font-bold bg-gradient-to-r from-amber-600 to-emerald-600 bg-clip-text text-transparent">
+                  <span className="text-sm sm:text-base font-bold bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#b8860b] bg-clip-text text-transparent">
                     ₹{order.total}
                   </span>
                 </div>
@@ -266,7 +267,7 @@ const AdminPendingOrdersNotification = () => {
                 <div className="pl-2 sm:hidden">
                   <Badge
                     variant="outline"
-                    className="text-[10px] h-5 border-amber-200 bg-amber-50 text-amber-700"
+                    className="text-[10px] h-5 border-[#0a1f44]/30 bg-[#0a1f44]/5 text-[#0a1f44]"
                   >
                     {order.status.replace(/_/g, " ")}
                   </Badge>
@@ -288,7 +289,7 @@ const AdminPendingOrdersNotification = () => {
                 <div className="flex gap-2 pt-1 pl-2">
                   <Button
                     size="sm"
-                    className="flex-1 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-md shadow-amber-500/20 text-xs sm:text-sm h-8 sm:h-9"
+                    className="flex-1 bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#d4af37] hover:opacity-90 text-white shadow-md shadow-[#0a1f44]/30 text-xs sm:text-sm h-8 sm:h-9"
                     onClick={() => {
                       setOpen(false);
                       navigate("/admin/orders");
@@ -307,7 +308,7 @@ const AdminPendingOrdersNotification = () => {
               <Button
                 size="lg"
                 variant="outline"
-                className="flex-1 h-11 border-2 border-amber-400 text-amber-700 hover:bg-amber-50 hover:text-amber-800 hover:border-amber-500 font-semibold shadow-sm"
+                className="flex-1 h-11 border-2 border-[#d4af37] text-[#0a1f44] hover:bg-[#d4af37]/10 hover:text-[#0a1f44] hover:border-[#b8860b] font-semibold shadow-sm"
                 onClick={() => {
                   try { sessionStorage.setItem(SUPPRESS_KEY, "1"); } catch {}
                   setAutoPopupSuppressed(true);
@@ -319,7 +320,7 @@ const AdminPendingOrdersNotification = () => {
               </Button>
               <Button
                 size="lg"
-                className="flex-1 h-11 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-md font-semibold"
+                className="flex-1 h-11 bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#d4af37] hover:opacity-90 text-white shadow-md font-semibold"
                 onClick={() => {
                   setOpen(false);
                   navigate("/admin/orders");
