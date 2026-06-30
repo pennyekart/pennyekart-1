@@ -240,10 +240,10 @@ const AdminPendingOrdersNotification = () => {
             {orders.map((order) => (
               <div
                 key={order.id}
-                className="relative overflow-hidden rounded-xl border bg-card p-3 sm:p-4 space-y-2 sm:space-y-3 shadow-sm hover:shadow-md hover:border-amber-300 transition-all"
+                className="relative overflow-hidden rounded-xl border bg-card p-3 sm:p-4 space-y-2 sm:space-y-3 shadow-sm hover:shadow-md hover:border-[#d4af37] transition-all"
               >
                 {/* Gradient accent bar */}
-                <div className="absolute left-0 top-0 bottom-1 w-1 rounded-l-xl bg-gradient-to-b from-amber-500 to-emerald-600" />
+                <div className="absolute left-0 top-0 bottom-1 w-1 rounded-l-xl bg-gradient-to-b from-[#0a1f44] via-[#0f5132] to-[#d4af37]" />
 
                 {/* Top row: ID + Amount */}
                 <div className="flex items-center justify-between pl-2">
@@ -253,12 +253,12 @@ const AdminPendingOrdersNotification = () => {
                     </span>
                     <Badge
                       variant="outline"
-                      className="text-[10px] sm:text-xs h-5 border-amber-200 bg-amber-50 text-amber-700 hidden sm:inline-flex"
+                      className="text-[10px] sm:text-xs h-5 border-[#0a1f44]/30 bg-[#0a1f44]/5 text-[#0a1f44] hidden sm:inline-flex"
                     >
                       {order.status.replace(/_/g, " ")}
                     </Badge>
                   </div>
-                  <span className="text-sm sm:text-base font-bold bg-gradient-to-r from-amber-600 to-emerald-600 bg-clip-text text-transparent">
+                  <span className="text-sm sm:text-base font-bold bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#b8860b] bg-clip-text text-transparent">
                     ₹{order.total}
                   </span>
                 </div>
@@ -267,7 +267,7 @@ const AdminPendingOrdersNotification = () => {
                 <div className="pl-2 sm:hidden">
                   <Badge
                     variant="outline"
-                    className="text-[10px] h-5 border-amber-200 bg-amber-50 text-amber-700"
+                    className="text-[10px] h-5 border-[#0a1f44]/30 bg-[#0a1f44]/5 text-[#0a1f44]"
                   >
                     {order.status.replace(/_/g, " ")}
                   </Badge>
@@ -289,7 +289,7 @@ const AdminPendingOrdersNotification = () => {
                 <div className="flex gap-2 pt-1 pl-2">
                   <Button
                     size="sm"
-                    className="flex-1 bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-600 hover:to-emerald-700 text-white shadow-md shadow-amber-500/20 text-xs sm:text-sm h-8 sm:h-9"
+                    className="flex-1 bg-gradient-to-r from-[#0a1f44] via-[#0f5132] to-[#d4af37] hover:opacity-90 text-white shadow-md shadow-[#0a1f44]/30 text-xs sm:text-sm h-8 sm:h-9"
                     onClick={() => {
                       setOpen(false);
                       navigate("/admin/orders");
