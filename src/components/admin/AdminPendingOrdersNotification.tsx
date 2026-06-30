@@ -196,11 +196,11 @@ const AdminPendingOrdersNotification = () => {
         {orders.length > 0 && (
           <button
             onClick={() => setOpen(true)}
-            className="relative flex items-center justify-center h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gradient-to-br from-amber-500 to-emerald-600 text-white shadow-lg shadow-amber-500/25 animate-bounce hover:animate-none transition-all hover:scale-105 active:scale-95"
+            className="relative flex items-center justify-center h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gradient-to-br from-[#0a1f44] via-[#0f5132] to-[#d4af37] text-white shadow-lg shadow-[#0a1f44]/40 animate-bounce hover:animate-none transition-all hover:scale-105 active:scale-95 ring-2 ring-[#d4af37]/40"
             title="Pending orders"
           >
             <Bell className="h-5 w-5 sm:h-6 sm:w-6" />
-            <span className="absolute -top-1 -right-1 bg-gradient-to-br from-rose-500 to-red-600 text-white text-[10px] sm:text-xs font-bold rounded-full h-5 w-5 sm:h-6 sm:w-6 flex items-center justify-center shadow-md">
+            <span className="absolute -top-1 -right-1 bg-gradient-to-br from-[#d4af37] to-[#b8860b] text-[#0a1f44] text-[10px] sm:text-xs font-bold rounded-full h-5 w-5 sm:h-6 sm:w-6 flex items-center justify-center shadow-md ring-1 ring-white/60">
               {orders.length}
             </span>
           </button>
