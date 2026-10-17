@@ -151,7 +151,7 @@ BEGIN
   IF _target.user_id IS NULL THEN RAISE EXCEPTION 'This mobile number is not registered on Pennyekart'; END IF;
   IF NOT COALESCE(_target.is_verified, false) THEN RAISE EXCEPTION 'This user has not verified their account yet'; END IF;
   IF EXISTS (SELECT 1 FROM public.community_members WHERE user_id = _target.user_id) THEN
-    RAISE EXCEPTION 'This user already belongs to a community (ഈ ഉപയോക്താവ് ഇതിനകം ഒരു കമ്മ്യൂണിറ്റിയിൽ അംഗമാണ്)';
+    RAISE EXCEPTION 'This person already belongs to a community (ഈ ഉപയോക്താവ് ഇതിനകം ഒരു കമ്മ്യൂണിറ്റിയിൽ അംഗമാണ്)';
   END IF;
   IF EXISTS (SELECT 1 FROM public.community_invites WHERE community_id = _cid AND invited_mobile = _norm AND status = 'pending') THEN
     RAISE EXCEPTION 'An invite is already pending for this number (ഈ നമ്പറിലേക്ക് ഇതിനകം ഒരു ക്ഷണം അയച്ചിട്ടുണ്ട്.)';
